@@ -54,7 +54,9 @@ class OpenAICompatibleProvider:
             content = choice["message"].get("content", "")
             finish_reason = choice.get("finish_reason", "stop") or "stop"
         except (KeyError, IndexError, TypeError) as exc:
-            raise ProviderExecutionError("OpenAI-compatible provider returned invalid response") from exc
+            raise ProviderExecutionError(
+                "OpenAI-compatible provider returned invalid response"
+            ) from exc
 
         usage_data = data.get("usage") or {}
         usage = Usage(
@@ -62,4 +64,9 @@ class OpenAICompatibleProvider:
             completion_tokens=int(usage_data.get("completion_tokens", 0) or 0),
             total_tokens=int(usage_data.get("total_tokens", 0) or 0),
         )
-        return ProviderChatResponse(content=content, usage=usage, finish_reason=finish_reason, raw=data)
+        return ProviderChatResponse(
+            content=content,
+            usage=usage,
+            finish_reason=finish_reason,
+            raw=data,
+        )
