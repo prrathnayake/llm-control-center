@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, Iterator
+from typing import Any
 
 
 def utc_now() -> str:
@@ -154,7 +155,10 @@ class SQLiteStore:
 
     def get_api_key_by_hash(self, key_hash: str) -> dict[str, Any] | None:
         with self._locked_cursor() as cursor:
-            row = cursor.execute("SELECT * FROM api_keys WHERE key_hash = ?", (key_hash,)).fetchone()
+            row = cursor.execute(
+                "SELECT * FROM api_keys WHERE key_hash = ?",
+                (key_hash,),
+            ).fetchone()
         key = self._row_to_dict(row)
         if key:
             key["scopes"] = json.loads(key["scopes"])
@@ -216,7 +220,11 @@ class SQLiteStore:
             "created_at": created_at,
         }
 
-    def list_usage_logs(self, project_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    def list_usage_logs(
+        self,
+        project_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
         with self._locked_cursor() as cursor:
             if project_id:
                 rows = cursor.execute(
