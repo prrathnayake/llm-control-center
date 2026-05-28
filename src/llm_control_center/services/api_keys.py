@@ -11,7 +11,13 @@ class ApiKeyService:
         self.store = store
         self.settings = settings
 
-    def create_project_key(self, *, project_id: str, name: str, scopes: list[str]) -> tuple[str, dict]:
+    def create_project_key(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        scopes: list[str],
+    ) -> tuple[str, dict]:
         if self.store.get_project(project_id) is None:
             raise AuthenticationError("project not found")
         raw_key = generate_api_key()
