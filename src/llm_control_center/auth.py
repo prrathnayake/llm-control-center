@@ -25,7 +25,7 @@ def generate_api_key(prefix: str = "llmcc") -> str:
 
 
 def hash_api_key(raw_key: str, settings: Settings) -> str:
-    material = f"{settings.api_key_pepper}:{raw_key}".encode("utf-8")
+    material = f"{settings.api_key_pepper}:{raw_key}".encode()
     return hashlib.sha256(material).hexdigest()
 
 
