@@ -19,6 +19,45 @@ cp .env.example .env
 docker compose up --build
 ```
 
+## Docker Hub publishing
+
+The repository includes `.github/workflows/docker-publish.yml`.
+
+The workflow runs on:
+
+- pull requests to `main`
+- pushes to `main`
+- version tags like `v0.1.0`
+- manual `workflow_dispatch`
+
+The Docker image is only built and pushed after the full test job passes.
+Pull requests build the image but do not push it.
+Pushes to `main` and version tags publish to Docker Hub.
+
+Add these GitHub Actions repository secrets:
+
+```text
+DOCKERHUB_USERNAME=<your-dockerhub-username>
+DOCKERHUB_TOKEN=<dockerhub-access-token>
+```
+
+Published tags include:
+
+```text
+latest              # only on main
+main                # branch tag
+v0.1.0              # git version tag
+sha-<commit-sha>    # immutable commit tag
+```
+
+Expected image name:
+
+```text
+<DOCKERHUB_USERNAME>/llm-control-center
+```
+
+Create a Docker Hub access token from Docker Hub account settings and use that token instead of your Docker Hub password.
+
 ## Rotate project API keys
 
 1. Create a new key for the project.
