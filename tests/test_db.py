@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import pytest
+import sqlalchemy as sa
 
-from llm_control_center.db import SQLiteStore
+from llm_control_center.db import Store
 
 
-class TestSQLiteStoreURLValidation:
-    def test_rejects_non_sqlite_url(self):
-        with pytest.raises(ValueError, match="Only sqlite"):
-            SQLiteStore("postgresql://localhost/db")
-
+class TestStoreURLValidation:
     def test_rejects_mysql_url(self):
-        with pytest.raises(ValueError, match="Only sqlite"):
-            SQLiteStore("mysql://localhost/db")
+        with pytest.raises((sa.exc.ArgumentError, ModuleNotFoundError)):
+            Store("mysql://localhost/db")
 
 
-class TestSQLiteStoreUsageLogs:
+class TestStoreUsageLogs:
     def test_list_usage_logs_with_project_id(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         try:
             project = store.create_project("proj1", "desc1")
@@ -55,7 +52,7 @@ class TestSQLiteStoreUsageLogs:
             store.close()
 
     def test_list_usage_logs_without_project_id(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         try:
             project = store.create_project("proj1", "desc1")
@@ -80,7 +77,7 @@ class TestSQLiteStoreUsageLogs:
             store.close()
 
     def test_list_usage_logs_respects_limit(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         try:
             project = store.create_project("proj1", "desc1")

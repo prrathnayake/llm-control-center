@@ -154,3 +154,42 @@ GET /admin/usage?project_id=<optional>
 ```
 
 Use this endpoint to inspect project-level traffic, provider routing, latency, token estimates, and errors.
+
+## Rate limiting
+
+All endpoints are subject to sliding-window rate limits. When a limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header.
+
+### Rate limit headers
+
+Every response includes:
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | Maximum requests allowed in the window |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp when the window resets |
+
+### Limits by endpoint group
+
+| Group | Endpoints | Default limit | Scope |
+|---|---|---|---|
+| Admin | `/admin/*` | 60 req/min | Per IP |
+| Chat completions | `/v1/chat/completions` | 30 req/min | Per API key (per project) |
+| Models / Health | `/v1/models`, `/health` | 120 req/min | Per IP |
+
+### Configuration
+
+Rate limits are configurable via environment variables (prefix `LLM_CC_`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_CC_RATE_LIMIT_ADMIN` | `60` | Admin endpoints: requests per minute |
+| `LLM_CC_RATE_LIMIT_CHAT` | `30` | Chat completions: requests per minute per project |
+| `LLM_CC_RATE_LIMIT_MODELS` | `120` | Models and health: requests per minute |
+| `LLM_CC_MAX_REQUEST_SIZE_MB` | `1` | Maximum request body size in MB |
+
+Set any rate limit to `0` to disable rate limiting for that group.
+
+### Request size limit
+
+Requests exceeding `LLM_CC_MAX_REQUEST_SIZE_MB` (default 1 MB) are rejected with `413 Payload Too Large`.

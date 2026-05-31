@@ -3,10 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import structlog
 
 from llm_control_center.errors import ProviderExecutionError
 from llm_control_center.providers.base import ProviderChatRequest, ProviderChatResponse
 from llm_control_center.schemas import ModelCapabilities, Usage
+
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class OpenAICompatibleProvider:
@@ -56,6 +59,12 @@ class OpenAICompatibleProvider:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            logger.error(
+                "provider_error",
+                provider="openai_compatible",
+                model=request.provider_model,
+                error=str(exc),
+            )
             raise ProviderExecutionError(f"OpenAI-compatible provider failed: {exc}") from exc
 
         data = response.json()
@@ -69,10 +78,21 @@ class OpenAICompatibleProvider:
             ) from exc
 
         usage_data = data.get("usage") or {}
+        prompt_tokens = int(usage_data.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(usage_data.get("completion_tokens", 0) or 0)
+        total = int(usage_data.get("total_tokens", 0) or 0)
         usage = Usage(
-            prompt_tokens=int(usage_data.get("prompt_tokens", 0) or 0),
-            completion_tokens=int(usage_data.get("completion_tokens", 0) or 0),
-            total_tokens=int(usage_data.get("total_tokens", 0) or 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total,
+        )
+        logger.debug(
+            "provider_call",
+            provider="openai_compatible",
+            model=request.provider_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total,
         )
         return ProviderChatResponse(
             content=content,

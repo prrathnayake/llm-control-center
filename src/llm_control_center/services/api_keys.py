@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from llm_control_center.auth import api_key_prefix, generate_api_key, hash_api_key
 from llm_control_center.config import Settings
-from llm_control_center.db import SQLiteStore
+from llm_control_center.db import Store
 from llm_control_center.errors import AuthenticationError
 
 
 class ApiKeyService:
-    def __init__(self, *, store: SQLiteStore, settings: Settings) -> None:
+    def __init__(self, *, store: Store, settings: Settings) -> None:
         self.store = store
         self.settings = settings
 

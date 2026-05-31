@@ -21,6 +21,12 @@ def settings(tmp_path) -> Settings:
         },
         default_model_alias="default-chat",
         openai_compatible_api_key="",
+        rate_limit_admin=0,
+        rate_limit_chat=0,
+        rate_limit_models=0,
+        max_request_size_mb=1,
+        docs_protected=False,
+        cors_origins=["http://testserver"],
     )
 
 

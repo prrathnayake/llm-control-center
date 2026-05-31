@@ -3,10 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import structlog
 
 from llm_control_center.errors import ProviderExecutionError
 from llm_control_center.providers.base import ProviderChatRequest, ProviderChatResponse
 from llm_control_center.schemas import ModelCapabilities, Usage
+
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class OllamaProvider:
@@ -43,6 +46,12 @@ class OllamaProvider:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            logger.error(
+                "provider_error",
+                provider="ollama",
+                model=request.provider_model,
+                error=str(exc),
+            )
             raise ProviderExecutionError(f"Ollama provider failed: {exc}") from exc
 
         data = response.json()
@@ -50,12 +59,21 @@ class OllamaProvider:
         content = message.get("content", "")
         prompt_tokens = int(data.get("prompt_eval_count", 0) or 0)
         completion_tokens = int(data.get("eval_count", 0) or 0)
+        total = prompt_tokens + completion_tokens
+        logger.debug(
+            "provider_call",
+            provider="ollama",
+            model=request.provider_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total,
+        )
         return ProviderChatResponse(
             content=content,
             usage=Usage(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
-                total_tokens=prompt_tokens + completion_tokens,
+                total_tokens=total,
             ),
             finish_reason="stop" if data.get("done", True) else "length",
             raw=data,

@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 
 from llm_control_center.config import Settings
-from llm_control_center.db import SQLiteStore
+from llm_control_center.db import Store
 from llm_control_center.errors import AuthenticationError
 from llm_control_center.services.api_keys import ApiKeyService
 
 
 class TestApiKeyService:
     def test_create_project_key_nonexistent_project(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         settings = Settings(api_key_pepper="test-pepper")
         service = ApiKeyService(store=store, settings=settings)
@@ -25,7 +25,7 @@ class TestApiKeyService:
             store.close()
 
     def test_authenticate_invalid_key(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         settings = Settings(api_key_pepper="test-pepper")
         service = ApiKeyService(store=store, settings=settings)
@@ -36,7 +36,7 @@ class TestApiKeyService:
             store.close()
 
     def test_create_and_authenticate_roundtrip(self, tmp_path):
-        store = SQLiteStore(f"sqlite:///{tmp_path}/test.db")
+        store = Store(f"sqlite:///{tmp_path}/test.db")
         store.initialize()
         settings = Settings(api_key_pepper="test-pepper")
         service = ApiKeyService(store=store, settings=settings)

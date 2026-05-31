@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from llm_control_center.db import SQLiteStore
+from llm_control_center.db import Store
 from llm_control_center.schemas import Usage
 
 
 class UsageService:
-    def __init__(self, *, store: SQLiteStore) -> None:
+    def __init__(self, *, store: Store) -> None:
         self.store = store
 
     def record(

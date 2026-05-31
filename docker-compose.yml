@@ -18,5 +18,20 @@ services:
   #     - ollama:/root/.ollama
   #   restart: unless-stopped
 
+  # Optional PostgreSQL database. Uncomment to use PostgreSQL instead of SQLite.
+  # Set LLM_CC_DATABASE_URL=postgresql+psycopg2://llm_cc:changeme@postgres:5432/llm_control_center in .env
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: llm_control_center
+  #     POSTGRES_USER: llm_cc
+  #     POSTGRES_PASSWORD: changeme
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
 # volumes:
 #   ollama:
+#   postgres_data:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
+
 from llm_control_center.auth import ProjectPrincipal
 from llm_control_center.errors import LLMControlCenterError, ProviderExecutionError
 from llm_control_center.providers.base import ProviderChatRequest
@@ -17,6 +19,8 @@ from llm_control_center.schemas import (
 )
 from llm_control_center.services.usage import UsageService
 from llm_control_center.telemetry import new_trace_id, now_epoch_seconds, timer
+
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class ChatService:
@@ -54,6 +58,14 @@ class ChatService:
             try:
                 provider_response = await provider.chat(provider_request)
             except LLMControlCenterError as exc:
+                logger.error(
+                    "chat_completion_error",
+                    model_alias=route.alias,
+                    provider=route.provider,
+                    latency_ms=timing.latency_ms,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                )
                 self.usage_service.record(
                     trace_id=trace_id,
                     project_id=principal.project_id,
@@ -68,6 +80,15 @@ class ChatService:
                 raise
             except Exception as exc:
                 error = ProviderExecutionError(f"unexpected provider failure: {exc}")
+                logger.error(
+                    "chat_completion_error",
+                    model_alias=route.alias,
+                    provider=route.provider,
+                    latency_ms=timing.latency_ms,
+                    error_type=type(error).__name__,
+                    error_message=str(error),
+                    exc_info=True,
+                )
                 self.usage_service.record(
                     trace_id=trace_id,
                     project_id=principal.project_id,
@@ -80,6 +101,14 @@ class ChatService:
                     error=str(error),
                 )
                 raise error from exc
+
+        logger.info(
+            "chat_completion_success",
+            model_alias=route.alias,
+            provider=route.provider,
+            latency_ms=timing.latency_ms,
+            tokens=provider_response.usage.total_tokens,
+        )
 
         self.usage_service.record(
             trace_id=trace_id,

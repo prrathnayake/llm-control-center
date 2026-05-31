@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     request_timeout_seconds: float = 60.0
 
+    rate_limit_admin: int = 60
+    rate_limit_chat: int = 30
+    rate_limit_models: int = 120
+    max_request_size_mb: int = 1
+    cors_origins: list[str] = Field(default=["http://localhost:3000", "http://localhost:8080"])
+    docs_protected: bool = True
+
     @field_validator("model_routes", mode="before")
     @classmethod
     def parse_model_routes(cls, value: Any) -> dict[str, dict[str, str]]:
@@ -49,6 +56,13 @@ class Settings(BaseSettings):
             if not isinstance(parsed, dict):
                 raise ValueError("LLM_CC_MODEL_ROUTES must be a JSON object")
             return parsed
+        return value
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
 
