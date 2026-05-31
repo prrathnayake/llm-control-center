@@ -8,7 +8,7 @@ class MockProvider:
     """Deterministic provider used for tests and local smoke checks."""
 
     name = "mock"
-    capabilities = ModelCapabilities(chat=True, streaming=True, tools=False, vision=False)
+    capabilities = ModelCapabilities(chat=True, streaming=False, tools=False, vision=False)
 
     async def chat(self, request: ProviderChatRequest) -> ProviderChatResponse:
         last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "")

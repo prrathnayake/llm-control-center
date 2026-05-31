@@ -48,7 +48,7 @@ def project_key(client: TestClient, admin_headers: dict[str, str]) -> str:
     key_response = client.post(
         f"/admin/projects/{project_id}/api-keys",
         headers=admin_headers,
-        json={"name": "dev", "scopes": ["chat:write"]},
+        json={"name": "dev", "scopes": ["chat:write", "models:read"]},
     )
     assert key_response.status_code == 200
     return key_response.json()["api_key"]

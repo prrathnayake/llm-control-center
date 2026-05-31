@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from typing import Any
 
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+_INSECURE_DEFAULTS = frozenset({
+    "change-me-admin-token",
+    "change-me-long-random-pepper",
+})
 
 
 class Settings(BaseSettings):
@@ -59,6 +67,17 @@ def validate_settings(settings: Settings) -> None:
                     "ctx": {"error": ValueError("missing default model route")},
                 }
             ],
+        )
+
+    if settings.admin_token in _INSECURE_DEFAULTS:
+        logger.warning(
+            "LLM_CC_ADMIN_TOKEN is using an insecure default value. "
+            "Set a strong, unique token before deploying to production."
+        )
+    if settings.api_key_pepper in _INSECURE_DEFAULTS:
+        logger.warning(
+            "LLM_CC_API_KEY_PEPPER is using an insecure default value. "
+            "Set a strong, unique pepper before deploying to production."
         )
 
 

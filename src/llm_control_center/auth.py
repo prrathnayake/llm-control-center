@@ -33,5 +33,5 @@ def secure_compare(left: str, right: str) -> bool:
     return secrets.compare_digest(left, right)
 
 
-def api_key_prefix(raw_key: str) -> str:
-    return raw_key[:16]
+def api_key_prefix(raw_key: str, length: int = 16) -> str:
+    return raw_key[:length]

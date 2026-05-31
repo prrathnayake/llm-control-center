@@ -7,6 +7,15 @@ from pydantic import BaseModel, Field
 ChatRole = Literal["system", "user", "assistant", "tool"]
 FinishReason = Literal["stop", "length", "tool_calls", "content_filter", "error"]
 
+_VALID_FINISH_REASONS: frozenset[str] = frozenset(FinishReason.__args__)
+
+
+def coerce_finish_reason(value: str) -> FinishReason:
+    """Coerce a provider's finish_reason string to a valid FinishReason literal."""
+    if value in _VALID_FINISH_REASONS:
+        return value  # type: ignore[return-value]
+    return "stop"
+
 
 class ChatMessage(BaseModel):
     role: ChatRole

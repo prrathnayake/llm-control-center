@@ -13,6 +13,7 @@ from llm_control_center.schemas import (
     ChatCompletionResponse,
     ChatMessage,
     Usage,
+    coerce_finish_reason,
 )
 from llm_control_center.services.usage import UsageService
 from llm_control_center.telemetry import new_trace_id, now_epoch_seconds, timer
@@ -101,7 +102,7 @@ class ChatService:
                 ChatChoice(
                     index=0,
                     message=ChatMessage(role="assistant", content=provider_response.content),
-                    finish_reason=provider_response.finish_reason,  # type: ignore[arg-type]
+                    finish_reason=coerce_finish_reason(provider_response.finish_reason),
                 )
             ],
             usage=provider_response.usage,

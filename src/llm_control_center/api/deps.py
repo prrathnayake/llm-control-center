@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Header, HTTPException, Request, status
 
 from llm_control_center.auth import ProjectPrincipal
@@ -37,7 +39,7 @@ def require_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> None:
     settings: Settings = request.app.state.settings
-    if x_admin_token != settings.admin_token:
+    if not x_admin_token or not secrets.compare_digest(x_admin_token, settings.admin_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid admin token")
 
 

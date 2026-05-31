@@ -22,6 +22,12 @@ class OpenAICompatibleProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout_seconds)
+        return self._client
 
     async def chat(self, request: ProviderChatRequest) -> ProviderChatResponse:
         if not self.api_key:
@@ -32,19 +38,23 @@ class OpenAICompatibleProvider:
             "messages": [message.model_dump(exclude_none=True) for message in request.messages],
             "temperature": request.temperature,
             "stream": False,
-            **request.provider_options,
         }
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
 
+        blocked_keys = {"model", "messages", "stream"}
+        for key, value in request.provider_options.items():
+            if key not in blocked_keys:
+                payload[key] = value
+
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    json=payload,
-                )
-                response.raise_for_status()
+            client = self._get_client()
+            response = await client.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=payload,
+            )
+            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderExecutionError(f"OpenAI-compatible provider failed: {exc}") from exc
 

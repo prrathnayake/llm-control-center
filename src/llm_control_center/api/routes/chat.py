@@ -20,10 +20,19 @@ def list_models(
     request: Request,
     principal: ProjectPrincipal = Depends(require_project_principal),
 ) -> dict:
-    principal.require_scope("chat:write")
+    try:
+        principal.require_scope("models:read")
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     models = []
     for route in request.app.state.router.list_aliases():
-        provider = request.app.state.providers.get(route.provider)
+        try:
+            provider = request.app.state.providers.get(route.provider)
+        except ProviderNotFoundError:
+            continue
         models.append(
             {
                 "id": route.alias,

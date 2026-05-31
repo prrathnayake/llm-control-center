@@ -18,6 +18,12 @@ class OllamaProvider:
     def __init__(self, *, base_url: str, timeout_seconds: float = 60.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout_seconds)
+        return self._client
 
     async def chat(self, request: ProviderChatRequest) -> ProviderChatResponse:
         payload: dict[str, Any] = {
@@ -33,9 +39,9 @@ class OllamaProvider:
             payload["options"]["num_predict"] = request.max_tokens
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(f"{self.base_url}/api/chat", json=payload)
-                response.raise_for_status()
+            client = self._get_client()
+            response = await client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderExecutionError(f"Ollama provider failed: {exc}") from exc
 

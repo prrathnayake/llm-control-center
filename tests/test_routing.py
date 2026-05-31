@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from llm_control_center.errors import UnknownModelError
 from llm_control_center.routing import ModelRouter
 
@@ -19,12 +21,8 @@ def test_router_rejects_unknown_alias():
         routes={"default-chat": {"provider": "mock", "provider_model": "mock-smart"}},
         default_alias="default-chat",
     )
-    try:
+    with pytest.raises(UnknownModelError, match="unknown model alias"):
         router.resolve("missing")
-    except UnknownModelError as exc:
-        assert "unknown model alias" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("Expected UnknownModelError")
 
 
 def test_unknown_model_returns_404(client, project_headers):

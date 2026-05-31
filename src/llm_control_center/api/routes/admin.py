@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from llm_control_center.api.deps import require_admin
@@ -20,8 +22,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def create_project(payload: CreateProjectRequest, request: Request) -> dict:
     try:
         return request.app.state.store.create_project(payload.name, payload.description)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"project with name '{payload.name}' already exists",
+        ) from exc
 
 
 @router.post(
