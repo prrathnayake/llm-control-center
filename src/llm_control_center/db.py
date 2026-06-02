@@ -112,6 +112,13 @@ class Store:
             ).fetchone()
         return self._row_to_dict(row)
 
+    def list_projects(self) -> list[dict[str, Any]]:
+        with self._locked_connection() as conn:
+            rows = conn.execute(
+                projects_table.select().order_by(projects_table.c.id)
+            ).fetchall()
+        return [dict(row._mapping) for row in rows]
+
     def create_api_key(
         self,
         *,
@@ -144,6 +151,33 @@ class Store:
         if key:
             key["scopes"] = json.loads(key["scopes"])
         return key
+
+    def list_api_keys(self, project_id: str) -> list[dict[str, Any]]:
+        with self._locked_connection() as conn:
+            rows = conn.execute(
+                api_keys_table.select()
+                .where(api_keys_table.c.project_id == project_id)
+                .order_by(api_keys_table.c.id)
+            ).fetchall()
+        result = []
+        for row in rows:
+            key = dict(row._mapping)
+            key["scopes"] = json.loads(key["scopes"])
+            key.pop("key_hash", None)
+            result.append(key)
+        return result
+
+    def revoke_api_key(self, project_id: str, key_id: str) -> bool:
+        with self._locked_connection() as conn:
+            result = conn.execute(
+                api_keys_table.delete().where(
+                    sa.and_(
+                        api_keys_table.c.id == key_id,
+                        api_keys_table.c.project_id == project_id,
+                    )
+                )
+            )
+            return result.rowcount > 0
 
     def insert_usage_log(
         self,
