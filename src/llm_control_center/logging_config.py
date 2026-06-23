@@ -55,9 +55,9 @@ def disable_logging() -> None:
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(logging.NullHandler())
-    null_file = open("/dev/null", "w")  # noqa: SIM115
     structlog.configure(
         processors=[structlog.processors.JSONRenderer()],
-        logger_factory=structlog.PrintLoggerFactory(file=null_file),
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )

@@ -23,3 +23,7 @@ class ProviderNotFoundError(LLMControlCenterError):
 
 class ProviderExecutionError(LLMControlCenterError):
     """Raised when a provider call fails."""
+
+
+class ProjectConflictError(LLMControlCenterError):
+    """Raised when creating a project whose name already exists."""

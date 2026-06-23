@@ -216,9 +216,11 @@ Every response includes:
 
 | Group | Endpoints | Default limit | Scope |
 |---|---|---|---|
-| Admin | `/admin/*` | 60 req/min | Per IP |
+| Admin | `/admin/*` | 60 req/min | Per client IP |
 | Chat completions | `/v1/chat/completions` | 30 req/min | Per API key (per project) |
-| Models / Health | `/v1/models`, `/health` | 120 req/min | Per IP |
+| Models / Health | `/v1/models`, `/health` | 120 req/min (shared pool) | Per client IP |
+
+The Models and Health endpoints share one bucket per client IP (so `GET /v1/models` and `GET /health` draw from the same 120 req/min allowance). The client IP is resolved from the leftmost `X-Forwarded-For` header value when present (e.g. behind a reverse proxy), falling back to the direct connection IP.
 
 ### Configuration
 

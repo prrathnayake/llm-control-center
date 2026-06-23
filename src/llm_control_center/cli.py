@@ -80,14 +80,15 @@ class GatewayClient:
         self._handle_error(response)
         return response.json().get("data", [])
 
-    def list_models(self) -> list[dict[str, Any]]:
+    def list_models(self, api_key: str) -> list[dict[str, Any]]:
         response = self._client.get(
             "/v1/models",
-            headers={"Authorization": "Bearer dummy"},
+            headers={"Authorization": f"Bearer {api_key}"},
         )
         if response.status_code == 401:
             click.echo(
-                "Error: The /v1/models endpoint requires a project API key, not admin token.",
+                "Error: The /v1/models endpoint requires a project API key (scope models:read), "
+                "not the admin token. Pass one via --api-key.",
                 err=True,
             )
             raise SystemExit(1)
@@ -350,11 +351,22 @@ def health(ctx: click.Context) -> None:
 
 
 @main.command()
+@click.option(
+    "--api-key",
+    "-k",
+    envvar="LLM_CC_API_KEY",
+    required=True,
+    help="Project API key (scope models:read). The admin token cannot list models.",
+)
 @click.pass_context
-def models(ctx: click.Context) -> None:
-    """List available model aliases."""
+def models(ctx: click.Context, api_key: str) -> None:
+    """List available model aliases.
+
+    Requires a project API key with the models:read scope; the admin token
+    used by the rest of the CLI is not authorized for /v1/models.
+    """
     client = _get_client(ctx)
-    models_data = client.list_models()
+    models_data = client.list_models(api_key)
     if not models_data:
         click.echo("No models available.")
         return

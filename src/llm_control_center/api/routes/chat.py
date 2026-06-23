@@ -10,7 +10,11 @@ from llm_control_center.errors import (
     ProviderNotFoundError,
     UnknownModelError,
 )
-from llm_control_center.schemas import ChatCompletionRequest, ChatCompletionResponse, ModelsResponse
+from llm_control_center.schemas import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ModelsResponse,
+)
 
 router = APIRouter(prefix="/v1", tags=["llm"])
 
@@ -21,26 +25,13 @@ def list_models(
     principal: ProjectPrincipal = Depends(require_project_principal),
 ) -> dict:
     try:
-        principal.require_scope("models:read")
+        models = request.app.state.models_service.list_models(principal=principal)
     except AuthorizationError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
-    models = []
-    for route in request.app.state.router.list_aliases():
-        try:
-            provider = request.app.state.providers.get(route.provider)
-        except ProviderNotFoundError:
-            continue
-        models.append(
-            {
-                "id": route.alias,
-                "provider": route.provider,
-                "capabilities": provider.capabilities.model_dump(),
-            }
-        )
-    return {"data": models}
+    return {"data": [m.model_dump() for m in models]}
 
 
 @router.post("/chat/completions", response_model=ChatCompletionResponse)

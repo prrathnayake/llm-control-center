@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import structlog
+from fastapi.concurrency import run_in_threadpool
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from llm_control_center.auth import ProjectPrincipal
@@ -36,6 +37,9 @@ class ChatService:
         self.router = router
         self.providers = providers
         self.usage_service = usage_service
+
+    async def _record_usage(self, **kwargs) -> None:
+        await run_in_threadpool(self.usage_service.record, **kwargs)
 
     async def complete(
         self,
@@ -92,7 +96,7 @@ class ChatService:
                     error_type=type(exc).__name__,
                     error_message=str(exc),
                 )
-                self.usage_service.record(
+                await self._record_usage(
                     trace_id=trace_id,
                     project_id=principal.project_id,
                     model_alias=route.alias,
@@ -116,7 +120,7 @@ class ChatService:
                     error_message=str(error),
                     exc_info=True,
                 )
-                self.usage_service.record(
+                await self._record_usage(
                     trace_id=trace_id,
                     project_id=principal.project_id,
                     model_alias=route.alias,
@@ -138,7 +142,7 @@ class ChatService:
             tokens=provider_response.usage.total_tokens,
         )
 
-        self.usage_service.record(
+        await self._record_usage(
             trace_id=trace_id,
             project_id=principal.project_id,
             model_alias=route.alias,

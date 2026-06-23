@@ -10,6 +10,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from llm_control_center.middleware import _get_client_ip as _client_ip
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add standard security headers to every response."""
@@ -92,8 +94,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             auth = request.headers.get("authorization", "")
             if auth.startswith("Bearer "):
                 return f"chat:{auth.removeprefix('Bearer ').strip()[:32]}"
-        client_ip = request.client.host if request.client else "unknown"
-        return f"{path.split('/')[1] if '/' in path else 'default'}:{client_ip}"
+        if path.startswith("/admin"):
+            bucket = "admin"
+        elif path.startswith("/v1/models") or path == "/health":
+            bucket = "models"
+        else:
+            bucket = "default"
+        client_ip = _client_ip(request)
+        return f"{bucket}:{client_ip}"
 
     def _cleanup_old_entries(self) -> None:
         now = time.time()
@@ -116,7 +124,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if self._cleanup_task is None:
-            self._cleanup_task = asyncio.get_event_loop().create_task(self._start_cleanup())
+            self._cleanup_task = asyncio.get_running_loop().create_task(self._start_cleanup())
 
         limit = self._get_limit(request)
 

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from llm_control_center.api.deps import require_admin
-from llm_control_center.errors import AuthenticationError
+from llm_control_center.errors import AuthenticationError, ProjectConflictError
 from llm_control_center.schemas import (
     ApiKeyResponse,
     CreateApiKeyRequest,
@@ -20,11 +19,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.post("/projects", response_model=ProjectResponse, dependencies=[Depends(require_admin)])
 def create_project(payload: CreateProjectRequest, request: Request) -> dict:
     try:
-        return request.app.state.store.create_project(payload.name, payload.description)
-    except sa.exc.IntegrityError as exc:
+        return request.app.state.project_service.create_project(
+            name=payload.name, description=payload.description
+        )
+    except ProjectConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"project with name '{payload.name}' already exists",
+            detail=str(exc),
         ) from exc
 
 
@@ -34,7 +35,7 @@ def create_project(payload: CreateProjectRequest, request: Request) -> dict:
     dependencies=[Depends(require_admin)],
 )
 def list_projects(request: Request) -> list[dict]:
-    return request.app.state.store.list_projects()
+    return request.app.state.project_service.list_projects()
 
 
 @router.get(
@@ -43,7 +44,7 @@ def list_projects(request: Request) -> list[dict]:
     dependencies=[Depends(require_admin)],
 )
 def get_project(project_id: str, request: Request) -> dict:
-    project = request.app.state.store.get_project(project_id)
+    project = request.app.state.project_service.get_project(project_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,8 +59,7 @@ def get_project(project_id: str, request: Request) -> dict:
     dependencies=[Depends(require_admin)],
 )
 def list_project_api_keys(project_id: str, request: Request) -> list[dict]:
-    keys = request.app.state.store.list_api_keys(project_id)
-    return keys
+    return request.app.state.project_service.list_api_keys(project_id)
 
 
 @router.post(
@@ -89,7 +89,9 @@ def create_project_api_key(
     dependencies=[Depends(require_admin)],
 )
 def revoke_project_api_key(project_id: str, key_id: str, request: Request) -> None:
-    success = request.app.state.store.revoke_api_key(project_id, key_id)
+    success = request.app.state.project_service.revoke_api_key(
+        project_id=project_id, key_id=key_id
+    )
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -103,5 +105,7 @@ def list_usage(
     project_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
 ) -> dict:
-    logs = request.app.state.store.list_usage_logs(project_id=project_id, limit=limit)
+    logs = request.app.state.project_service.list_usage_logs(
+        project_id=project_id, limit=limit
+    )
     return {"data": logs}

@@ -228,6 +228,39 @@ class TestHealthCommand:
             assert "ok" in result.output
 
 
+class TestModelsCommand:
+    def test_models_requires_api_key(self, runner):
+        with patch("llm_control_center.cli.GatewayClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.list_models.return_value = [
+                {
+                    "id": "default-chat",
+                    "provider": "mock",
+                    "capabilities": {"chat": True, "streaming": False, "tools": False},
+                }
+            ]
+            MockClient.return_value = mock_instance
+            result = runner.invoke(main, ["models", "--api-key", "llmcc_test"])
+            assert result.exit_code == 0
+            assert "default-chat" in result.output
+            assert "mock" in result.output
+            mock_instance.list_models.assert_called_once_with("llmcc_test")
+
+    def test_models_missing_api_key_errors(self, runner):
+        result = runner.invoke(main, ["models"])
+        assert result.exit_code != 0
+        assert "api-key" in result.output.lower()
+
+    def test_models_empty(self, runner):
+        with patch("llm_control_center.cli.GatewayClient") as MockClient:
+            mock_instance = MagicMock()
+            mock_instance.list_models.return_value = []
+            MockClient.return_value = mock_instance
+            result = runner.invoke(main, ["models", "--api-key", "llmcc_test"])
+            assert result.exit_code == 0
+            assert "No models available" in result.output
+
+
 class TestCopyToClipboard:
     def test_copy_returns_false_on_failure(self):
         with patch("subprocess.Popen") as mock_popen:

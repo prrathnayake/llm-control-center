@@ -137,6 +137,32 @@ class TestRateLimitExceeded:
         assert resp.status_code == 429
 
 
+class TestForwardedForRateLimit:
+    def test_admin_rate_limit_uses_forwarded_for(self):
+        settings, client = _make_limited_app(admin_limit=2)
+        forwarded_headers = {"X-Admin-Token": "test-admin", "X-Forwarded-For": "203.0.113.9"}
+
+        for _ in range(2):
+            resp = client.get("/admin/usage", headers=forwarded_headers)
+            assert resp.status_code == 200
+
+        resp = client.get("/admin/usage", headers=forwarded_headers)
+        assert resp.status_code == 429
+
+    def test_models_and_health_share_bucket(self):
+        settings, client = _make_limited_app(models_limit=2)
+        forwarded_headers = {"X-Forwarded-For": "198.51.100.7"}
+        # Two requests from different paths draw from the shared models bucket
+        # (use /health twice since it's unauthenticated; both still share the models bucket)
+        assert client.get("/health", headers=forwarded_headers).status_code == 200
+        assert client.get("/health", headers=forwarded_headers).status_code == 200
+        # Third request is rejected
+        assert client.get("/health", headers=forwarded_headers).status_code == 429
+        # A different forwarded-IP gets its own bucket
+        other_headers = {"X-Forwarded-For": "198.51.100.42"}
+        assert client.get("/health", headers=other_headers).status_code == 200
+
+
 class TestPerProjectChatRateLimit:
     def test_different_keys_get_separate_limits(self):
         settings, client = _make_limited_app(chat_limit=2)

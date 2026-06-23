@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -69,7 +70,7 @@ class Store:
 
     def __init__(self, database_url: str) -> None:
         self._engine = sa.create_engine(database_url)
-        self._lock = __import__("threading").RLock()
+        self._lock = threading.RLock()
 
     def close(self) -> None:
         with self._lock:
@@ -251,4 +252,4 @@ class Store:
         return result
 
 
-SQLiteStore = Store
+SQLiteStore = Store  # deprecated alias; use Store directly. Kept for back-compat.

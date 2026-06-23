@@ -29,13 +29,18 @@ class OllamaProvider:
         return self._client
 
     async def chat(self, request: ProviderChatRequest) -> ProviderChatResponse:
+        blocked_keys = {"model", "messages", "stream"}
         payload: dict[str, Any] = {
             "model": request.provider_model,
             "messages": [message.model_dump(exclude_none=True) for message in request.messages],
             "stream": False,
             "options": {
                 "temperature": request.temperature,
-                **request.provider_options,
+                **{
+                    k: v
+                    for k, v in request.provider_options.items()
+                    if k not in blocked_keys
+                },
             },
         }
         if request.max_tokens is not None:

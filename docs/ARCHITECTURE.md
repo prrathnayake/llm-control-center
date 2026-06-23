@@ -39,7 +39,7 @@ src/llm_control_center/
     middleware.py Security headers, docs protection, rate limiting
     routes/       health, admin, and chat (/v1) route modules
   providers/      Provider adapters and registry
-  services/       Application services (api_keys, chat, usage)
+  services/       Application services (api_keys, chat, models, projects, usage)
   app.py          App factory
   auth.py         API key and admin auth primitives
   cli.py          `llmcc` console client (admin API + models + health)
@@ -69,7 +69,7 @@ The `mock` provider exists so every route, CI pipeline, and local test can run w
 
 ### 4. Service layer first
 
-FastAPI routes are thin. Routing, auth, logging, and provider execution live in dedicated modules.
+FastAPI routes are thin. Routing, auth, logging, provider execution, project/usage admin, and model listing live in dedicated service modules (`services/`). Routes only translate domain errors to HTTP status codes.
 
 ### 5. Local and cloud parity
 
