@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import time
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
@@ -42,7 +43,7 @@ class DocsProtectionMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if request.url.path in _DOCS_PATHS:
             token = request.headers.get("X-Admin-Token", "")
-            if token != self.admin_token:
+            if not (token and secrets.compare_digest(token, self.admin_token)):
                 return JSONResponse(status_code=403, content={"detail": "Forbidden"})
         return await call_next(request)
 
