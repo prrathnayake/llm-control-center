@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from llm_control_center.db import Store
-from llm_control_center.schemas import Usage
+from llm_control_center.schemas import RequestMetadata, Usage
 
 
 class UsageService:
@@ -20,7 +20,9 @@ class UsageService:
         latency_ms: int,
         usage: Usage,
         error: str | None = None,
+        metadata: RequestMetadata | None = None,
     ) -> dict:
+        metadata = metadata or RequestMetadata()
         return self.store.insert_usage_log(
             trace_id=trace_id,
             project_id=project_id,
@@ -33,4 +35,8 @@ class UsageService:
             completion_tokens=usage.completion_tokens,
             total_tokens=usage.total_tokens,
             error=error,
+            workflow=metadata.workflow,
+            session_id=metadata.session_id,
+            user_id=metadata.user_id,
+            tags=metadata.tags,
         )

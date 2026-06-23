@@ -73,6 +73,49 @@ Response includes the raw key once:
 }
 ```
 
+## List projects
+
+```http
+GET /admin/projects
+```
+
+Returns a list of projects (newest first by id).
+
+## Get project
+
+```http
+GET /admin/projects/{project_id}
+```
+
+Response:
+
+```json
+{
+  "id": "...",
+  "name": "social-agent",
+  "description": "Social media agent platform",
+  "created_at": "..."
+}
+```
+
+Returns `404` if the project does not exist.
+
+## List project API keys
+
+```http
+GET /admin/projects/{project_id}/api-keys
+```
+
+Returns the project's API keys. `key_hash` is never included.
+
+## Revoke API key
+
+```http
+DELETE /admin/projects/{project_id}/api-keys/{key_id}
+```
+
+Hard-deletes the API key. Returns `204 No Content` on success, `404` if the key does not exist under that project. Keys cannot be recovered after revocation.
+
 ## List models
 
 ```http
@@ -89,7 +132,7 @@ Response:
       "provider": "mock",
       "capabilities": {
         "chat": true,
-        "streaming": true,
+        "streaming": false,
         "tools": false,
         "vision": false
       }

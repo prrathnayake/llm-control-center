@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import structlog
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from llm_control_center.auth import ProjectPrincipal
 from llm_control_center.errors import LLMControlCenterError, ProviderExecutionError
@@ -14,6 +15,7 @@ from llm_control_center.schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatMessage,
+    RequestMetadata,
     Usage,
     coerce_finish_reason,
 )
@@ -43,6 +45,30 @@ class ChatService:
     ) -> ChatCompletionResponse:
         principal.require_scope("chat:write")
         trace_id = new_trace_id()
+        metadata = request.metadata
+        bind_contextvars(
+            workflow=metadata.workflow,
+            session_id=metadata.session_id,
+            user_id=metadata.user_id,
+        )
+        try:
+            return await self._complete(
+                principal=principal,
+                request=request,
+                trace_id=trace_id,
+                metadata=metadata,
+            )
+        finally:
+            unbind_contextvars("workflow", "session_id", "user_id")
+
+    async def _complete(
+        self,
+        *,
+        principal: ProjectPrincipal,
+        request: ChatCompletionRequest,
+        trace_id: str,
+        metadata: RequestMetadata,
+    ) -> ChatCompletionResponse:
         route = self.router.resolve(request.model)
         provider = self.providers.get(route.provider)
         provider_request = ProviderChatRequest(
@@ -76,6 +102,7 @@ class ChatService:
                     latency_ms=timing.latency_ms,
                     usage=Usage(),
                     error=str(exc),
+                    metadata=metadata,
                 )
                 raise
             except Exception as exc:
@@ -99,6 +126,7 @@ class ChatService:
                     latency_ms=timing.latency_ms,
                     usage=Usage(),
                     error=str(error),
+                    metadata=metadata,
                 )
                 raise error from exc
 
@@ -119,6 +147,7 @@ class ChatService:
             status="success",
             latency_ms=timing.latency_ms,
             usage=provider_response.usage,
+            metadata=metadata,
         )
 
         return ChatCompletionResponse(

@@ -63,9 +63,14 @@ Create a Docker Hub access token from Docker Hub account settings and use that t
 1. Create a new key for the project.
 2. Update the client project secret.
 3. Restart or reload the client project.
-4. Revoke/delete old keys in a future admin endpoint.
+4. Revoke the old key:
 
-The current MVP supports creation and validation. Revocation is planned.
+```bash
+curl -X DELETE http://localhost:8080/admin/projects/<project_id>/api-keys/<key_id> \
+  -H "X-Admin-Token: change-me-admin-token"
+```
+
+The MVP supports creation, validation, listing, and hard revocation (`DELETE /admin/projects/{project_id}/api-keys/{key_id}`). Revocation is a hard delete; past usage logs are retained.
 
 ## Production checklist
 

@@ -13,30 +13,6 @@ from llm_control_center.services.api_keys import ApiKeyService
 logger = structlog.stdlib.get_logger(__name__)
 
 
-def get_app_settings(request: Request) -> Settings:
-    return request.app.state.settings
-
-
-def get_api_key_service(request: Request) -> ApiKeyService:
-    return request.app.state.api_key_service
-
-
-def get_chat_service(request: Request):
-    return request.app.state.chat_service
-
-
-def get_router(request: Request):
-    return request.app.state.router
-
-
-def get_providers(request: Request):
-    return request.app.state.providers
-
-
-def get_store(request: Request):
-    return request.app.state.store
-
-
 def require_admin(
     request: Request,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),

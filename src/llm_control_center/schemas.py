@@ -125,6 +125,10 @@ class UsageLogResponse(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    workflow: str | None = None
+    session_id: str | None = None
+    user_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
     error: str | None
     created_at: str
 

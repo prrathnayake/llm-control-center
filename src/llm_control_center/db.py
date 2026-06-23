@@ -52,6 +52,10 @@ usage_logs_table = Table(
     Column("prompt_tokens", Integer, nullable=False),
     Column("completion_tokens", Integer, nullable=False),
     Column("total_tokens", Integer, nullable=False),
+    Column("workflow", String, nullable=True),
+    Column("session_id", String, nullable=True),
+    Column("user_id", String, nullable=True),
+    Column("tags", Text, nullable=True),
     Column("error", Text, nullable=True),
     Column("created_at", String, nullable=False),
 )
@@ -193,8 +197,13 @@ class Store:
         completion_tokens: int,
         total_tokens: int,
         error: str | None,
+        workflow: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        tags: list[str] | None = None,
     ) -> dict[str, Any]:
         created_at = utc_now()
+        tags_json = json.dumps(tags) if tags else None
         values = {
             "trace_id": trace_id,
             "project_id": project_id,
@@ -206,6 +215,10 @@ class Store:
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": total_tokens,
+            "workflow": workflow,
+            "session_id": session_id,
+            "user_id": user_id,
+            "tags": tags_json,
             "error": error,
             "created_at": created_at,
         }
@@ -215,6 +228,7 @@ class Store:
         return {
             "id": row_id,
             **values,
+            "tags": tags if tags is not None else [],
         }
 
     def list_usage_logs(
@@ -228,7 +242,13 @@ class Store:
                 query = query.where(usage_logs_table.c.project_id == project_id)
             query = query.limit(limit)
             rows = conn.execute(query).fetchall()
-        return [dict(row._mapping) for row in rows]
+        result = []
+        for row in rows:
+            row_dict = dict(row._mapping)
+            tags = row_dict.get("tags")
+            row_dict["tags"] = json.loads(tags) if tags else []
+            result.append(row_dict)
+        return result
 
 
 SQLiteStore = Store
