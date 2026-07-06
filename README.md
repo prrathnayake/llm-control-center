@@ -17,11 +17,13 @@ Your projects
 - FastAPI backend
 - Project API key creation
 - Stable `/v1/chat/completions` endpoint
+- OpenAI-style `/v1/responses` endpoint for agent and structured-output requests
 - Provider abstraction layer
 - Mock provider for safe tests
 - OpenAI-compatible provider adapter
 - Ollama provider adapter
 - SQLite persistence for projects, keys, and usage logs
+- Production-ready Postgres storage path for concurrent activity tracking
 - GitHub Actions CI pipeline
 - Unit/API tests that do **not** call paid providers
 - Dockerfile and Docker Compose
@@ -73,6 +75,20 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+Call the Responses endpoint:
+
+```bash
+curl -X POST http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer <project_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model":"default-chat",
+    "input":"Return a short JSON status for this workspace agent",
+    "text":{"format":{"type":"json_schema","schema":{"type":"object"}}},
+    "metadata":{"workflow":"agent-run","session_id":"sess_123"}
+  }'
+```
+
 ## Model routing
 
 Routes are configured using `LLM_CC_MODEL_ROUTES`:
@@ -81,7 +97,11 @@ Routes are configured using `LLM_CC_MODEL_ROUTES`:
 {
   "default-chat": {"provider": "mock", "provider_model": "mock-smart"},
   "local-chat": {"provider": "ollama", "provider_model": "llama3.1"},
-  "cloud-chat": {"provider": "openai_compatible", "provider_model": "gpt-4o-mini"}
+  "cloud-chat": {
+    "provider": "openai_compatible",
+    "provider_model": "gpt-4o-mini",
+    "api": "responses"
+  }
 }
 ```
 
@@ -108,6 +128,7 @@ No test calls OpenAI, OpenRouter, Anthropic, Gemini, Ollama, or any paid API.
 | `GET` | `/admin/usage` | View usage logs |
 | `GET` | `/v1/models` | List exposed model aliases |
 | `POST` | `/v1/chat/completions` | Normalized chat completion |
+| `POST` | `/v1/responses` | Normalized agent/structured-output response |
 
 ## Documentation
 

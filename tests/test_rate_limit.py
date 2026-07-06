@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable, Generator
 
+import pytest
 from fastapi.testclient import TestClient
 
 from llm_control_center.app import create_app
@@ -33,6 +35,23 @@ def _make_limited_app(
     return settings, TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture()
+def limited_client_factory() -> Generator[Callable[..., tuple[Settings, TestClient]], None, None]:
+    clients: list[TestClient] = []
+
+    def factory(**kwargs) -> tuple[Settings, TestClient]:
+        settings, client = _make_limited_app(**kwargs)
+        client.__enter__()
+        clients.append(client)
+        return settings, client
+
+    try:
+        yield factory
+    finally:
+        for client in reversed(clients):
+            client.__exit__(None, None, None)
+
+
 def _create_project_and_key(client: TestClient, admin_headers: dict) -> str:
     resp = client.post(
         "/admin/projects",
@@ -51,8 +70,8 @@ def _create_project_and_key(client: TestClient, admin_headers: dict) -> str:
 
 
 class TestRateLimitHeaders:
-    def test_rate_limit_headers_on_health(self):
-        settings, client = _make_limited_app()
+    def test_rate_limit_headers_on_health(self, limited_client_factory):
+        settings, client = limited_client_factory()
         resp = client.get("/health")
         assert resp.status_code == 200
         assert "X-RateLimit-Limit" in resp.headers
@@ -60,15 +79,15 @@ class TestRateLimitHeaders:
         assert "X-RateLimit-Reset" in resp.headers
         assert resp.headers["X-RateLimit-Limit"] == "4"
 
-    def test_rate_limit_headers_on_admin(self):
-        settings, client = _make_limited_app(admin_limit=10)
+    def test_rate_limit_headers_on_admin(self, limited_client_factory):
+        settings, client = limited_client_factory(admin_limit=10)
         admin_headers = {"X-Admin-Token": "test-admin"}
         resp = client.get("/admin/usage", headers=admin_headers)
         assert resp.status_code == 200
         assert resp.headers["X-RateLimit-Limit"] == "10"
 
-    def test_rate_limit_headers_decrement(self):
-        settings, client = _make_limited_app(models_limit=3)
+    def test_rate_limit_headers_decrement(self, limited_client_factory):
+        settings, client = limited_client_factory(models_limit=3)
         headers = {"X-Admin-Token": "test-admin"}
         # Create project/key for model access
         api_key = _create_project_and_key(client, headers)
@@ -82,8 +101,8 @@ class TestRateLimitHeaders:
 
 
 class TestRateLimitExceeded:
-    def test_admin_rate_limit_exceeded(self):
-        settings, client = _make_limited_app(admin_limit=3)
+    def test_admin_rate_limit_exceeded(self, limited_client_factory):
+        settings, client = limited_client_factory(admin_limit=3)
         admin_headers = {"X-Admin-Token": "test-admin"}
 
         for _ in range(3):
@@ -96,8 +115,8 @@ class TestRateLimitExceeded:
         assert "Retry-After" in resp.headers
         assert "X-RateLimit-Limit" in resp.headers
 
-    def test_chat_rate_limit_exceeded(self):
-        settings, client = _make_limited_app(chat_limit=2)
+    def test_chat_rate_limit_exceeded(self, limited_client_factory):
+        settings, client = limited_client_factory(chat_limit=2)
         admin_headers = {"X-Admin-Token": "test-admin"}
         api_key = _create_project_and_key(client, admin_headers)
         chat_headers = {"Authorization": f"Bearer {api_key}"}
@@ -123,8 +142,8 @@ class TestRateLimitExceeded:
         )
         assert resp.status_code == 429
 
-    def test_models_rate_limit_exceeded(self):
-        settings, client = _make_limited_app(models_limit=2)
+    def test_models_rate_limit_exceeded(self, limited_client_factory):
+        settings, client = limited_client_factory(models_limit=2)
         admin_headers = {"X-Admin-Token": "test-admin"}
         api_key = _create_project_and_key(client, admin_headers)
         model_headers = {"Authorization": f"Bearer {api_key}"}
@@ -138,8 +157,8 @@ class TestRateLimitExceeded:
 
 
 class TestForwardedForRateLimit:
-    def test_admin_rate_limit_uses_forwarded_for(self):
-        settings, client = _make_limited_app(admin_limit=2)
+    def test_admin_rate_limit_uses_forwarded_for(self, limited_client_factory):
+        settings, client = limited_client_factory(admin_limit=2)
         forwarded_headers = {"X-Admin-Token": "test-admin", "X-Forwarded-For": "203.0.113.9"}
 
         for _ in range(2):
@@ -149,8 +168,8 @@ class TestForwardedForRateLimit:
         resp = client.get("/admin/usage", headers=forwarded_headers)
         assert resp.status_code == 429
 
-    def test_models_and_health_share_bucket(self):
-        settings, client = _make_limited_app(models_limit=2)
+    def test_models_and_health_share_bucket(self, limited_client_factory):
+        settings, client = limited_client_factory(models_limit=2)
         forwarded_headers = {"X-Forwarded-For": "198.51.100.7"}
         # Two requests from different paths draw from the shared models bucket
         # (use /health twice since it's unauthenticated; both still share the models bucket)
@@ -164,8 +183,8 @@ class TestForwardedForRateLimit:
 
 
 class TestPerProjectChatRateLimit:
-    def test_different_keys_get_separate_limits(self):
-        settings, client = _make_limited_app(chat_limit=2)
+    def test_different_keys_get_separate_limits(self, limited_client_factory):
+        settings, client = limited_client_factory(chat_limit=2)
         admin_headers = {"X-Admin-Token": "test-admin"}
 
         # Create two projects with separate keys
@@ -232,8 +251,8 @@ class TestPerProjectChatRateLimit:
 
 
 class TestRequestSizeLimit:
-    def test_oversize_request_rejected(self):
-        settings, client = _make_limited_app(max_request_size_mb=0)
+    def test_oversize_request_rejected(self, limited_client_factory):
+        settings, client = limited_client_factory(max_request_size_mb=0)
         admin_headers = {"X-Admin-Token": "test-admin"}
         resp = client.post(
             "/admin/projects",
@@ -244,8 +263,8 @@ class TestRequestSizeLimit:
         # (body always has some content)
         assert resp.status_code == 413
 
-    def test_normal_request_accepted(self):
-        settings, client = _make_limited_app(max_request_size_mb=1)
+    def test_normal_request_accepted(self, limited_client_factory):
+        settings, client = limited_client_factory(max_request_size_mb=1)
         admin_headers = {"X-Admin-Token": "test-admin"}
         resp = client.post(
             "/admin/projects",
@@ -256,9 +275,9 @@ class TestRequestSizeLimit:
 
 
 class TestDisabledInTestMode:
-    def test_zero_limit_disables_rate_limiting(self):
+    def test_zero_limit_disables_rate_limiting(self, limited_client_factory):
         """Rate limiting is disabled when limit=0 (test mode)."""
-        settings, client = _make_limited_app(admin_limit=0)
+        settings, client = limited_client_factory(admin_limit=0)
         admin_headers = {"X-Admin-Token": "test-admin"}
 
         # Should not get rate limited even with many requests

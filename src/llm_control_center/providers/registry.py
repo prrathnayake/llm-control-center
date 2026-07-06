@@ -30,6 +30,7 @@ def build_provider_registry(settings: Settings) -> ProviderRegistry:
                 base_url=settings.openai_compatible_base_url,
                 api_key=settings.openai_compatible_api_key,
                 timeout_seconds=settings.request_timeout_seconds,
+                responses_api=settings.openai_compatible_responses_api,
             ),
             OllamaProvider(
                 base_url=settings.ollama_base_url,

@@ -18,9 +18,7 @@ class ProjectService:
         try:
             return self.store.create_project(name, description)
         except sa.exc.IntegrityError as exc:
-            raise ProjectConflictError(
-                f"project with name '{name}' already exists"
-            ) from exc
+            raise ProjectConflictError(f"project with name '{name}' already exists") from exc
 
     def list_projects(self) -> list[dict[str, Any]]:
         return self.store.list_projects()
@@ -35,6 +33,26 @@ class ProjectService:
         return self.store.revoke_api_key(project_id, key_id)
 
     def list_usage_logs(
-        self, *, project_id: str | None = None, limit: int = 100
+        self,
+        *,
+        project_id: str | None = None,
+        limit: int = 100,
+        endpoint: str | None = None,
+        status: str | None = None,
+        workflow: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        created_after: str | None = None,
+        created_before: str | None = None,
     ) -> list[dict[str, Any]]:
-        return self.store.list_usage_logs(project_id=project_id, limit=limit)
+        return self.store.list_usage_logs(
+            project_id=project_id,
+            limit=limit,
+            endpoint=endpoint,
+            status=status,
+            workflow=workflow,
+            session_id=session_id,
+            user_id=user_id,
+            created_after=created_after,
+            created_before=created_before,
+        )

@@ -89,9 +89,7 @@ def create_project_api_key(
     dependencies=[Depends(require_admin)],
 )
 def revoke_project_api_key(project_id: str, key_id: str, request: Request) -> None:
-    success = request.app.state.project_service.revoke_api_key(
-        project_id=project_id, key_id=key_id
-    )
+    success = request.app.state.project_service.revoke_api_key(project_id=project_id, key_id=key_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -100,12 +98,28 @@ def revoke_project_api_key(project_id: str, key_id: str, request: Request) -> No
 
 
 @router.get("/usage", response_model=UsageLogsResponse, dependencies=[Depends(require_admin)])
-def list_usage(
+async def list_usage(
     request: Request,
     project_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    endpoint: str | None = None,
+    status: str | None = None,
+    workflow: str | None = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
 ) -> dict:
+    await request.app.state.usage_service.flush()
     logs = request.app.state.project_service.list_usage_logs(
-        project_id=project_id, limit=limit
+        project_id=project_id,
+        limit=limit,
+        endpoint=endpoint,
+        status=status,
+        workflow=workflow,
+        session_id=session_id,
+        user_id=user_id,
+        created_after=created_after,
+        created_before=created_before,
     )
     return {"data": logs}

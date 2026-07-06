@@ -14,6 +14,8 @@ from llm_control_center.schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ModelsResponse,
+    ResponseRequest,
+    ResponseResult,
 )
 
 router = APIRouter(prefix="/v1", tags=["llm"])
@@ -47,6 +49,39 @@ async def chat_completions(
         )
     try:
         return await request.app.state.chat_service.complete(
+            principal=principal,
+            request=payload,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except UnknownModelError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ProviderNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    except ProviderExecutionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/responses", response_model=ResponseResult)
+async def responses(
+    payload: ResponseRequest,
+    request: Request,
+    principal: ProjectPrincipal = Depends(require_project_principal),
+) -> ResponseResult:
+    try:
+        return await request.app.state.response_service.respond(
             principal=principal,
             request=payload,
         )

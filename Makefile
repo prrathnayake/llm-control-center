@@ -7,7 +7,7 @@ dev:
 	uvicorn llm_control_center.app:app --reload --host 0.0.0.0 --port 8080
 
 test:
-	pytest
+	python -m pytest
 
 lint:
 	ruff check src tests

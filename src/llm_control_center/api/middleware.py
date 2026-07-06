@@ -82,7 +82,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path.startswith("/admin"):
             return self.admin_limit
-        if path.startswith("/v1/chat/completions"):
+        if path.startswith("/v1/chat/completions") or path.startswith("/v1/responses"):
             return self.chat_limit
         if path.startswith("/v1/models") or path == "/health":
             return self.models_limit
@@ -90,7 +90,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _get_key(self, request: Request) -> str:
         path = request.url.path
-        if path.startswith("/v1/chat/completions"):
+        if path.startswith("/v1/chat/completions") or path.startswith("/v1/responses"):
             auth = request.headers.get("authorization", "")
             if auth.startswith("Bearer "):
                 return f"chat:{auth.removeprefix('Bearer ').strip()[:32]}"

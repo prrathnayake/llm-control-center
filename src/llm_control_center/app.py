@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.types import Receive, Scope, Send
 
 from llm_control_center.api.middleware import (
     DocsProtectionMiddleware,
@@ -19,7 +20,7 @@ from llm_control_center.middleware import CorrelationIdMiddleware
 from llm_control_center.providers.registry import build_provider_registry
 from llm_control_center.routing import ModelRouter
 from llm_control_center.services.api_keys import ApiKeyService
-from llm_control_center.services.chat import ChatService
+from llm_control_center.services.chat import ChatService, ResponseService
 from llm_control_center.services.models import ModelsService
 from llm_control_center.services.projects import ProjectService
 from llm_control_center.services.usage import UsageService
@@ -42,12 +43,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     project_service = ProjectService(store=store)
     models_service = ModelsService(router=router, providers=providers)
     chat_service = ChatService(router=router, providers=providers, usage_service=usage_service)
+    response_service = ResponseService(
+        router=router,
+        providers=providers,
+        usage_service=usage_service,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        await usage_service.start()
         try:
             yield
         finally:
+            await usage_service.stop()
             store.close()
 
     fastapi_app = FastAPI(
@@ -65,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     fastapi_app.state.project_service = project_service
     fastapi_app.state.models_service = models_service
     fastapi_app.state.chat_service = chat_service
+    fastapi_app.state.response_service = response_service
 
     fastapi_app.include_router(health.router)
     fastapi_app.include_router(admin.router)
@@ -95,4 +104,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return fastapi_app
 
 
-app = create_app()
+class LazyApp:
+    """ASGI wrapper that avoids initializing the default app at import time."""
+
+    def __init__(self) -> None:
+        self._app: FastAPI | None = None
+
+    def _get_app(self) -> FastAPI:
+        if self._app is None:
+            self._app = create_app()
+        return self._app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self._get_app()(scope, receive, send)
+
+
+app = LazyApp()

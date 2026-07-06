@@ -5,6 +5,8 @@
 - Prove API auth works.
 - Prove project API keys are hashed and validated.
 - Prove chat requests route through the provider abstraction.
+- Prove responses requests route through the provider abstraction.
+- Prove structured-output configuration is forwarded without exposing provider models.
 - Prove usage is logged for success and failure scenarios.
 - Prove CI never calls paid APIs.
 
@@ -14,6 +16,7 @@
 tests/test_auth.py            admin and project auth
 tests/test_api_keys.py        key creation and one-time raw key behavior
 tests/test_chat_mock.py       chat endpoint through mock provider
+tests/test_responses.py       responses endpoint, activity filters, concurrency
 tests/test_routing.py         alias routing and unknown model handling
 tests/test_provider_mapping.py provider response normalization
 tests/test_ci_contract.py     CI and repo contract checks
@@ -26,6 +29,9 @@ make install
 make test
 make lint
 ```
+
+`make test` runs `python -m pytest` so the active interpreter controls which
+environment is used.
 
 ## CI/CD pipeline
 
@@ -47,3 +53,7 @@ Tests must never require these environment variables:
 - `LLM_CC_OPENAI_COMPATIBLE_API_KEY`
 
 Provider adapters that call real APIs must be tested with fake transports, mock providers, or contract tests.
+
+Responses contract tests must use `httpx.MockTransport` or mock providers. They
+must assert that provider API keys and provider model names are not required from
+client requests.

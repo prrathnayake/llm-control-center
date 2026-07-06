@@ -10,6 +10,7 @@ class ModelRoute:
     alias: str
     provider: str
     provider_model: str
+    api: str = "chat_completions"
 
 
 class ModelRouter:
@@ -26,6 +27,7 @@ class ModelRouter:
             alias=model_alias,
             provider=route["provider"],
             provider_model=route["provider_model"],
+            api=route.get("api", "chat_completions"),
         )
 
     def list_aliases(self) -> list[ModelRoute]:

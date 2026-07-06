@@ -12,6 +12,15 @@ LLM_CC_API_KEY_PEPPER=change-me-long-random-pepper
 LLM_CC_DATABASE_URL=sqlite:///./data/control_center.sqlite3
 ```
 
+For concurrent workspace agents, use Postgres:
+
+```bash
+LLM_CC_DATABASE_URL=postgresql+psycopg2://llm_cc:changeme@localhost:5432/llm_control_center
+```
+
+The gateway indexes activity logs by project, trace, creation time, status,
+workflow, and session.
+
 ## Run with Docker
 
 ```bash
@@ -74,7 +83,7 @@ The MVP supports creation, validation, listing, and hard revocation (`DELETE /ad
 
 ## Production checklist
 
-- Replace SQLite with PostgreSQL.
+- Use PostgreSQL for concurrent agent activity.
 - Store provider API keys in a secret manager.
 - Set a long random `LLM_CC_API_KEY_PEPPER`.
 - Use HTTPS only.
@@ -85,7 +94,8 @@ The MVP supports creation, validation, listing, and hard revocation (`DELETE /ad
 
 ## Observability plan
 
-Current MVP records usage rows in SQLite.
+Current MVP records usage/activity rows in the configured SQL database and
+flushes queued activity before admin usage reads.
 
 Next version should export:
 

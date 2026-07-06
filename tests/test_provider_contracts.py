@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from llm_control_center.errors import ProviderExecutionError
-from llm_control_center.providers.base import ProviderChatRequest
+from llm_control_center.providers.base import ProviderChatRequest, ProviderResponseRequest
 from llm_control_center.providers.ollama import OllamaProvider
 from llm_control_center.providers.openai_compatible import OpenAICompatibleProvider
 from llm_control_center.schemas import ChatMessage
@@ -16,6 +16,14 @@ def _request(messages=None, **kwargs):
     return ProviderChatRequest(
         provider_model="test-model",
         messages=messages or [ChatMessage(role="user", content="hello")],
+        **kwargs,
+    )
+
+
+def _response_request(**kwargs):
+    return ProviderResponseRequest(
+        provider_model="test-model",
+        input="hello",
         **kwargs,
     )
 
@@ -203,6 +211,81 @@ class TestOpenAICompatibleProvider:
             _run(provider._client.aclose())
 
         assert response.finish_reason == "stop"
+
+    def test_native_responses_forwards_structured_output_payload(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            import json
+
+            assert request.url == "https://example.com/v1/responses"
+            assert request.headers["Authorization"] == "Bearer sk-test"
+            payload = json.loads(request.read())
+            assert payload["model"] == "test-model"
+            assert payload["input"] == "hello"
+            assert payload["instructions"] == "Return JSON"
+            assert payload["max_output_tokens"] == 50
+            assert payload["parallel_tool_calls"] is True
+            assert payload["text"]["format"]["type"] == "json_schema"
+            assert payload["text"]["format"]["schema"]["type"] == "object"
+            assert payload["reasoning"]["effort"] == "low"
+            assert payload["metadata"] == {"workflow": "contract"}
+            assert payload["top_p"] == 0.8
+            assert "provider_model" not in payload
+            return httpx.Response(
+                200,
+                json={
+                    "id": "resp_test",
+                    "status": "completed",
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": '{"ok": true}',
+                                    "annotations": [],
+                                }
+                            ],
+                        }
+                    ],
+                    "output_text": '{"ok": true}',
+                    "usage": {
+                        "input_tokens": 5,
+                        "output_tokens": 4,
+                        "total_tokens": 9,
+                    },
+                },
+            )
+
+        provider = _openai_provider(handler)
+        provider.responses_api = True
+        try:
+            response = _run(
+                provider.respond(
+                    _response_request(
+                        instructions="Return JSON",
+                        max_output_tokens=50,
+                        text={
+                            "format": {
+                                "type": "json_schema",
+                                "schema": {"type": "object"},
+                                "strict": True,
+                            }
+                        },
+                        reasoning={"effort": "low"},
+                        parallel_tool_calls=True,
+                        metadata={"workflow": "contract"},
+                        provider_options={"top_p": 0.8, "model": "hacked"},
+                    )
+                )
+            )
+        finally:
+            _run(provider._client.aclose())
+
+        assert response.id == "resp_test"
+        assert response.output_text == '{"ok": true}'
+        assert response.usage.total_tokens == 9
 
 
 # --------------------------------------------------------------------------- #

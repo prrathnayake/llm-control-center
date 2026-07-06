@@ -42,6 +42,21 @@ class ChatCompletionRequest(BaseModel):
     metadata: RequestMetadata = Field(default_factory=RequestMetadata)
 
 
+class ResponseRequest(BaseModel):
+    model: str | None = None
+    input: str | list[dict[str, Any]]
+    instructions: str | None = None
+    temperature: float | None = Field(default=0.7, ge=0.0, le=2.0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
+    metadata: RequestMetadata = Field(default_factory=RequestMetadata)
+    text: dict[str, Any] = Field(default_factory=lambda: {"format": {"type": "text"}})
+    reasoning: dict[str, Any] = Field(default_factory=dict)
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool = True
+    provider_options: dict[str, Any] = Field(default_factory=dict)
+
+
 class Usage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -67,9 +82,40 @@ class ChatCompletionResponse(BaseModel):
 
 class ModelCapabilities(BaseModel):
     chat: bool = True
+    responses: bool = False
     streaming: bool = False
+    structured_outputs: bool = False
     tools: bool = False
     vision: bool = False
+    parallel_tool_calls: bool = False
+    reasoning: bool = False
+
+
+class ResponseOutputContent(BaseModel):
+    type: Literal["output_text"] = "output_text"
+    text: str
+    annotations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ResponseOutputMessage(BaseModel):
+    type: Literal["message"] = "message"
+    role: Literal["assistant"] = "assistant"
+    status: Literal["completed", "in_progress", "incomplete"] = "completed"
+    content: list[ResponseOutputContent]
+
+
+class ResponseResult(BaseModel):
+    id: str
+    object: Literal["response"] = "response"
+    status: Literal["completed", "in_progress", "failed", "incomplete"] = "completed"
+    created_at: int
+    model: str
+    provider: str
+    trace_id: str
+    output: list[ResponseOutputMessage]
+    output_text: str
+    usage: Usage
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class PublicModel(BaseModel):
@@ -116,6 +162,8 @@ class CreateApiKeyResponse(BaseModel):
 class UsageLogResponse(BaseModel):
     id: int
     trace_id: str
+    endpoint: str = "/v1/chat/completions"
+    request_kind: str = "chat"
     project_id: str
     model_alias: str
     provider: str

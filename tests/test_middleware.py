@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -79,6 +81,7 @@ class TestRequestID:
 
 
 class TestDocsProtection:
+    @contextmanager
     def _make_protected_client(self, tmp_path) -> TestClient:
         settings = Settings(
             admin_token="secret-token",
@@ -95,45 +98,46 @@ class TestDocsProtection:
             cors_origins=["http://testserver"],
         )
         app = _make_app(settings)
-        return TestClient(app)
+        with TestClient(app) as client:
+            yield client
 
     def test_docs_returns_403_without_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/docs")
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/docs")
         assert response.status_code == 403
         assert response.json()["detail"] == "Forbidden"
 
     def test_docs_returns_403_with_wrong_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/docs", headers={"X-Admin-Token": "wrong-token"})
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/docs", headers={"X-Admin-Token": "wrong-token"})
         assert response.status_code == 403
 
     def test_docs_returns_200_with_correct_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/docs", headers={"X-Admin-Token": "secret-token"})
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/docs", headers={"X-Admin-Token": "secret-token"})
         assert response.status_code == 200
 
     def test_redoc_returns_403_without_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/redoc")
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/redoc")
         assert response.status_code == 403
 
     def test_redoc_returns_200_with_correct_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/redoc", headers={"X-Admin-Token": "secret-token"})
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/redoc", headers={"X-Admin-Token": "secret-token"})
         assert response.status_code == 200
 
     def test_openapi_json_returns_403_without_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/openapi.json")
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/openapi.json")
         assert response.status_code == 403
 
     def test_openapi_json_returns_200_with_correct_token(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/openapi.json", headers={"X-Admin-Token": "secret-token"})
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/openapi.json", headers={"X-Admin-Token": "secret-token"})
         assert response.status_code == 200
 
     def test_health_endpoint_not_protected(self, tmp_path) -> None:
-        client = self._make_protected_client(tmp_path)
-        response = client.get("/health")
+        with self._make_protected_client(tmp_path) as client:
+            response = client.get("/health")
         assert response.status_code == 200

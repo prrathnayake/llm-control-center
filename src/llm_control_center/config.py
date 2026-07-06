@@ -10,10 +10,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
-_INSECURE_DEFAULTS = frozenset({
-    "change-me-admin-token",
-    "change-me-long-random-pepper",
-})
+_INSECURE_DEFAULTS = frozenset(
+    {
+        "change-me-admin-token",
+        "change-me-long-random-pepper",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -35,6 +37,7 @@ class Settings(BaseSettings):
     default_model_alias: str = "default-chat"
     openai_compatible_base_url: str = "https://api.openai.com"
     openai_compatible_api_key: str = ""
+    openai_compatible_responses_api: bool = False
     ollama_base_url: str = "http://localhost:11434"
     request_timeout_seconds: float = 60.0
 

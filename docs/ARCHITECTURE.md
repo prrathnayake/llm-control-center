@@ -12,6 +12,7 @@ The gateway owns:
 - provider request normalization
 - response normalization
 - usage logging
+- activity filtering for agent workflows and sessions
 - error normalization
 - future policy and budget controls
 
@@ -29,6 +30,10 @@ Client project
   -> UsageService records request/response metadata
   -> Normalized response returns to client
 ```
+
+`POST /v1/responses` follows the same flow through `ResponseService`. It accepts
+agent-style input, structured-output configuration, tool declarations, reasoning
+options, and metadata, then routes through `ProviderAdapter.respond()`.
 
 ## Package layout
 
@@ -63,6 +68,10 @@ Projects call the same endpoint no matter which model provider is used.
 
 A project can request `cloud-chat`. The gateway decides that this means OpenAI, OpenRouter, Gemini, Anthropic, or another provider. Clients never need to know the provider to make a request and never send provider model names. The gateway may surface the resolved provider name in responses (`GET /v1/models`, `ChatCompletionResponse.provider`, `/admin/usage`) as informational observability metadata; the routing decision itself stays centralized.
 
+Routes may declare an internal `api` mode such as `chat_completions` or
+`responses`. This is a gateway/provider concern only; clients continue to send
+the alias.
+
 ### 3. No paid APIs in tests
 
 The `mock` provider exists so every route, CI pipeline, and local test can run without external cost.
@@ -74,6 +83,12 @@ FastAPI routes are thin. Routing, auth, logging, provider execution, project/usa
 ### 5. Local and cloud parity
 
 OpenAI-compatible APIs and Ollama are both adapters behind the same interface.
+
+### 6. Activity logging off the request path
+
+Usage/activity records are enqueued through `UsageService` and written by a
+bounded async worker. Admin usage reads flush the queue first, so monitoring sees
+recent records without forcing provider calls to wait on every database write.
 
 ## Extension points
 
@@ -89,9 +104,17 @@ class MyProvider(ProviderAdapter):
 
 Then register an instance for it in `build_provider_registry(settings)` in `providers/registry.py`. (The registry is built in code rather than via entry-point plugins; add a call there and a contract test under `tests/test_provider_contracts.py` with a fake HTTP transport.)
 
+Providers should implement both:
+
+- `chat(request: ProviderChatRequest)` for `/v1/chat/completions`
+- `respond(request: ProviderResponseRequest)` for `/v1/responses`
+
+Providers without a native Responses API can convert response input into chat
+messages and return a normalized response output.
+
 ## Future production upgrades
 
-- PostgreSQL instead of SQLite
+- PostgreSQL as the production database for concurrent agent activity
 - Redis rate limits
 - Prometheus/OpenTelemetry metrics
 - Langfuse-style trace export
