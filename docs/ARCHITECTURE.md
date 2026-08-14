@@ -107,6 +107,8 @@ application lifespan shutdown.
 Chat rate-limit buckets use the authenticated API-key ID, never raw credential
 text. Invalid or rotating credentials share a client-IP pre-authentication
 bucket. Forwarding headers are ignored unless `LLM_CC_TRUST_PROXY_HEADERS=true`.
+Buckets are atomically consumed in the configured SQL store, so replica count
+does not multiply allowances or erase them on gateway restart.
 The middleware validates declared length and actual body bytes, and public
 schemas cap collection sizes, metadata, token requests, and free text.
 
@@ -135,7 +137,7 @@ messages and return a normalized response output.
 ## Future production upgrades
 
 - PostgreSQL as the production database for concurrent agent activity
-- Redis rate-limit storage for horizontally scaled deployments
+- Redis rate-limit storage if deployments require sliding windows instead of SQL fixed windows
 - Prometheus/OpenTelemetry metrics
 - Langfuse-style trace export
 - streaming provider passthrough

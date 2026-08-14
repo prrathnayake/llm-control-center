@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy import Column, ForeignKey, Integer, MetaData, String, Table, Text
+from sqlalchemy import Column, Float, ForeignKey, Integer, MetaData, String, Table, Text
 
 
 def utc_now() -> str:
@@ -67,6 +67,14 @@ usage_logs_table = Table(
     sa.Index("ix_usage_logs_status", "status"),
     sa.Index("ix_usage_logs_workflow", "workflow"),
     sa.Index("ix_usage_logs_session_id", "session_id"),
+)
+
+rate_limit_buckets_table = Table(
+    "rate_limit_buckets",
+    metadata,
+    Column("bucket_key", String, primary_key=True),
+    Column("window_start", Float, nullable=False),
+    Column("request_count", Integer, nullable=False),
 )
 
 
@@ -341,6 +349,34 @@ class Store:
             row_dict["tags"] = json.loads(tags) if tags else []
             result.append(row_dict)
         return result
+
+    def consume_rate_limit(
+        self,
+        *,
+        bucket_key: str,
+        limit: int,
+        window_seconds: int,
+        now: float,
+    ) -> tuple[bool, int, float]:
+        """Atomically consume a shared fixed-window bucket across replicas."""
+        window_start = float(int(now // window_seconds) * window_seconds)
+        reset_at = window_start + window_seconds
+        statement = sa.text(
+            "INSERT INTO rate_limit_buckets(bucket_key,window_start,request_count) "
+            "VALUES(:bucket_key,:window_start,1) "
+            "ON CONFLICT(bucket_key) DO UPDATE SET "
+            "request_count=CASE WHEN rate_limit_buckets.window_start=:window_start "
+            "THEN rate_limit_buckets.request_count+1 ELSE 1 END,"
+            "window_start=:window_start RETURNING request_count"
+        )
+        with self._locked_connection() as conn:
+            count = int(
+                conn.execute(
+                    statement,
+                    {"bucket_key": bucket_key, "window_start": window_start},
+                ).scalar_one()
+            )
+        return count <= limit, max(0, limit - count), reset_at
 
 
 SQLiteStore = Store  # deprecated alias; use Store directly. Kept for back-compat.

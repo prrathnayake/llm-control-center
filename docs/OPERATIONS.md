@@ -92,7 +92,7 @@ The MVP supports creation, validation, listing, and hard revocation (`DELETE /ad
 - Set a long random `LLM_CC_API_KEY_PEPPER`.
 - Use HTTPS only.
 - Keep `LLM_CC_TRUST_PROXY_HEADERS=false` unless a trusted edge strips incoming forwarding headers.
-- Add an edge rate limiter when running multiple gateway replicas; the built-in limiter is process-local.
+- Add an edge rate limiter for volumetric protection; authenticated gateway buckets are shared in SQL.
 - Add per-project budgets.
 - Tune provider bulkhead/circuit settings against production latency and capacity.
 - Add structured log export.

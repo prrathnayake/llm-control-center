@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import secrets
 import time
-from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
@@ -77,8 +76,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.window_seconds = window_seconds
         self.max_request_size_bytes = max_request_size_bytes
         self.trust_proxy_headers = trust_proxy_headers
-        self._store: dict[str, deque[float]] = defaultdict(deque)
-        self._last_cleanup = 0.0
 
     def _get_limit(self, request: Request) -> int:
         path = request.url.path
@@ -120,13 +117,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             request, trust_proxy_headers=self.trust_proxy_headers
         )
         return f"{bucket}:{client_ip}"
-
-    def _cleanup_old_entries(self) -> None:
-        now = time.time()
-        cutoff = now - self.window_seconds
-        empty_keys = [k for k, v in self._store.items() if not v or v[-1] < cutoff]
-        for k in empty_keys:
-            del self._store[k]
 
     def _add_rate_headers(
         self, response: Response, limit: int, remaining: int, reset: float
@@ -176,17 +166,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         key = await self._get_key(request)
         now = time.time()
-        if now - self._last_cleanup >= 300:
-            self._cleanup_old_entries()
-            self._last_cleanup = now
-        window_start = now - self.window_seconds
-        entries = self._store[key]
-
-        while entries and entries[0] < window_start:
-            entries.popleft()
-
-        if len(entries) >= limit:
-            reset_time = entries[0] + self.window_seconds
+        try:
+            allowed, remaining, reset_time = await run_in_threadpool(
+                request.app.state.store.consume_rate_limit,
+                bucket_key=key,
+                limit=limit,
+                window_seconds=self.window_seconds,
+                now=now,
+            )
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Rate-limit service unavailable"},
+            )
+        if not allowed:
             retry_after = int(reset_time - now) + 1
             response = JSONResponse(
                 status_code=429,
@@ -195,10 +188,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
             self._add_rate_headers(response, limit, 0, reset_time)
             return response
-
-        entries.append(now)
-        remaining = limit - len(entries)
-        reset_time = now + self.window_seconds
 
         response = await call_next(request)
         self._add_rate_headers(response, limit, remaining, reset_time)
