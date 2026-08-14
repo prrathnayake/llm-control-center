@@ -4,7 +4,7 @@ import json
 import threading
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,7 +43,7 @@ usage_logs_table = Table(
     "usage_logs",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("trace_id", String, nullable=False),
+    Column("trace_id", String, nullable=False, unique=True),
     Column("endpoint", String, nullable=False, default="/v1/chat/completions"),
     Column("request_kind", String, nullable=False, default="chat"),
     Column("project_id", String, ForeignKey("projects.id"), nullable=False),
@@ -82,6 +82,7 @@ class Store:
             engine_kwargs["poolclass"] = sa.pool.NullPool
         self._engine = sa.create_engine(database_url, **engine_kwargs)
         self._lock = threading.RLock()
+        self._serialize_connections = database_url.startswith("sqlite:")
 
     def close(self) -> None:
         with self._lock:
@@ -92,6 +93,12 @@ class Store:
             metadata.create_all(self._engine)
             with self._engine.begin() as conn:
                 self._ensure_usage_activity_columns(conn)
+                conn.execute(
+                    sa.text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS "
+                        "uq_usage_logs_trace_id ON usage_logs(trace_id)"
+                    )
+                )
                 for index in usage_logs_table.indexes:
                     index.create(bind=conn, checkfirst=True)
 
@@ -114,7 +121,8 @@ class Store:
 
     @contextmanager
     def _locked_connection(self) -> Iterator[sa.engine.Connection]:
-        with self._lock:
+        lock_context = self._lock if self._serialize_connections else nullcontext()
+        with lock_context:
             conn = self._engine.connect()
             try:
                 yield conn
@@ -258,7 +266,35 @@ class Store:
             "created_at": created_at,
         }
         with self._locked_connection() as conn:
-            result = conn.execute(usage_logs_table.insert().values(**values))
+            existing = conn.execute(
+                usage_logs_table.select().where(
+                    usage_logs_table.c.trace_id == trace_id
+                )
+            ).fetchone()
+            if existing is not None:
+                existing_values = dict(existing._mapping)
+                existing_tags = existing_values.get("tags")
+                existing_values["tags"] = (
+                    json.loads(existing_tags) if existing_tags else []
+                )
+                return existing_values
+            try:
+                with conn.begin_nested():
+                    result = conn.execute(usage_logs_table.insert().values(**values))
+            except sa.exc.IntegrityError:
+                existing = conn.execute(
+                    usage_logs_table.select().where(
+                        usage_logs_table.c.trace_id == trace_id
+                    )
+                ).fetchone()
+                if existing is None:
+                    raise
+                existing_values = dict(existing._mapping)
+                existing_tags = existing_values.get("tags")
+                existing_values["tags"] = (
+                    json.loads(existing_tags) if existing_tags else []
+                )
+                return existing_values
             row_id = result.inserted_primary_key[0]
         return {
             "id": row_id,

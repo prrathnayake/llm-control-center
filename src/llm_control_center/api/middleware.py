@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import secrets
 import time
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
+from fastapi.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -68,6 +68,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         models_limit: int = 120,
         window_seconds: int = 60,
         max_request_size_bytes: int = 1_048_576,
+        trust_proxy_headers: bool = False,
     ) -> None:
         super().__init__(app)
         self.admin_limit = admin_limit
@@ -75,8 +76,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.models_limit = models_limit
         self.window_seconds = window_seconds
         self.max_request_size_bytes = max_request_size_bytes
+        self.trust_proxy_headers = trust_proxy_headers
         self._store: dict[str, deque[float]] = defaultdict(deque)
-        self._cleanup_task: asyncio.Task | None = None
+        self._last_cleanup = 0.0
 
     def _get_limit(self, request: Request) -> int:
         path = request.url.path
@@ -88,19 +90,35 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return self.models_limit
         return max(self.admin_limit, self.chat_limit, self.models_limit)
 
-    def _get_key(self, request: Request) -> str:
+    async def _get_key(self, request: Request) -> str:
         path = request.url.path
         if path.startswith("/v1/chat/completions") or path.startswith("/v1/responses"):
             auth = request.headers.get("authorization", "")
             if auth.startswith("Bearer "):
-                return f"chat:{auth.removeprefix('Bearer ').strip()[:32]}"
+                raw_key = auth.removeprefix("Bearer ").strip()
+                try:
+                    key = await run_in_threadpool(
+                        request.app.state.api_key_service.authenticate,
+                        raw_key,
+                    )
+                except Exception:
+                    pass
+                else:
+                    request.state.authenticated_api_key = key
+                    return f"chat:key:{key['id']}"
+            client_ip = _client_ip(
+                request, trust_proxy_headers=self.trust_proxy_headers
+            )
+            return f"chat:unauthenticated:{client_ip}"
         if path.startswith("/admin"):
             bucket = "admin"
         elif path.startswith("/v1/models") or path == "/health":
             bucket = "models"
         else:
             bucket = "default"
-        client_ip = _client_ip(request)
+        client_ip = _client_ip(
+            request, trust_proxy_headers=self.trust_proxy_headers
+        )
         return f"{bucket}:{client_ip}"
 
     def _cleanup_old_entries(self) -> None:
@@ -110,11 +128,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         for k in empty_keys:
             del self._store[k]
 
-    async def _start_cleanup(self) -> None:
-        while True:
-            await asyncio.sleep(300)
-            self._cleanup_old_entries()
-
     def _add_rate_headers(
         self, response: Response, limit: int, remaining: int, reset: float
     ) -> None:
@@ -123,16 +136,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Reset"] = str(int(reset))
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if self._cleanup_task is None:
-            self._cleanup_task = asyncio.get_running_loop().create_task(self._start_cleanup())
-
         limit = self._get_limit(request)
 
         if limit == 0:
             return await call_next(request)
 
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self.max_request_size_bytes:
+        try:
+            parsed_content_length = int(content_length) if content_length else None
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header"},
+            )
+        if parsed_content_length is not None and parsed_content_length < 0:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header"},
+            )
+        if (
+            parsed_content_length is not None
+            and parsed_content_length > self.max_request_size_bytes
+        ):
             return JSONResponse(
                 status_code=413,
                 content={
@@ -140,8 +165,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        key = self._get_key(request)
+        body = await request.body()
+        if len(body) > self.max_request_size_bytes:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "detail": f"Request body too large (max {self.max_request_size_bytes} bytes)"
+                },
+            )
+
+        key = await self._get_key(request)
         now = time.time()
+        if now - self._last_cleanup >= 300:
+            self._cleanup_old_entries()
+            self._last_cleanup = now
         window_start = now - self.window_seconds
         entries = self._store[key]
 

@@ -10,6 +10,7 @@ Required for local development:
 LLM_CC_ADMIN_TOKEN=change-me-admin-token
 LLM_CC_API_KEY_PEPPER=change-me-long-random-pepper
 LLM_CC_DATABASE_URL=sqlite:///./data/control_center.sqlite3
+LLM_CC_USAGE_SPOOL_PATH=./data/usage_spool.sqlite3
 ```
 
 For concurrent workspace agents, use Postgres:
@@ -19,7 +20,9 @@ LLM_CC_DATABASE_URL=postgresql+psycopg2://llm_cc:changeme@localhost:5432/llm_con
 ```
 
 The gateway indexes activity logs by project, trace, creation time, status,
-workflow, and session.
+workflow, and session. `trace_id` is an idempotency key. The independent usage
+spool survives gateway restarts and retains exhausted entries as `dead_letter`
+rows for operator inspection and replay.
 
 ## Run with Docker
 
@@ -84,12 +87,14 @@ The MVP supports creation, validation, listing, and hard revocation (`DELETE /ad
 ## Production checklist
 
 - Use PostgreSQL for concurrent agent activity.
+- Put the usage spool on durable, monitored storage.
 - Store provider API keys in a secret manager.
 - Set a long random `LLM_CC_API_KEY_PEPPER`.
 - Use HTTPS only.
-- Add reverse proxy rate limits.
+- Keep `LLM_CC_TRUST_PROXY_HEADERS=false` unless a trusted edge strips incoming forwarding headers.
+- Add an edge rate limiter when running multiple gateway replicas; the built-in limiter is process-local.
 - Add per-project budgets.
-- Add provider health checks.
+- Tune provider bulkhead/circuit settings against production latency and capacity.
 - Add structured log export.
 
 ## Observability plan

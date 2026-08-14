@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import structlog
@@ -94,6 +95,22 @@ class ChatService:
         with timer() as timing:
             try:
                 provider_response = await provider.chat(provider_request)
+            except asyncio.CancelledError:
+                await self._record_usage(
+                    trace_id=trace_id,
+                    endpoint="/v1/chat/completions",
+                    request_kind="chat",
+                    project_id=principal.project_id,
+                    model_alias=route.alias,
+                    provider=route.provider,
+                    provider_model=route.provider_model,
+                    status="cancelled",
+                    latency_ms=timing.latency_ms,
+                    usage=Usage(),
+                    error="request cancelled",
+                    metadata=metadata,
+                )
+                raise
             except LLMControlCenterError as exc:
                 logger.error(
                     "chat_completion_error",
@@ -119,7 +136,7 @@ class ChatService:
                 )
                 raise
             except Exception as exc:
-                error = ProviderExecutionError(f"unexpected provider failure: {exc}")
+                error = ProviderExecutionError("unexpected provider failure")
                 logger.error(
                     "chat_completion_error",
                     model_alias=route.alias,
@@ -252,6 +269,22 @@ class ResponseService:
             try:
                 provider = self.providers.get(route.provider)
                 provider_response = await provider.respond(provider_request)
+            except asyncio.CancelledError:
+                await self._record_usage(
+                    trace_id=trace_id,
+                    endpoint="/v1/responses",
+                    request_kind="responses",
+                    project_id=principal.project_id,
+                    model_alias=route.alias,
+                    provider=route.provider,
+                    provider_model=route.provider_model,
+                    status="cancelled",
+                    latency_ms=timing.latency_ms,
+                    usage=Usage(),
+                    error="request cancelled",
+                    metadata=metadata,
+                )
+                raise
             except LLMControlCenterError as exc:
                 logger.error(
                     "response_error",
@@ -277,7 +310,7 @@ class ResponseService:
                 )
                 raise
             except Exception as exc:
-                error = ProviderExecutionError(f"unexpected provider failure: {exc}")
+                error = ProviderExecutionError("unexpected provider failure")
                 logger.error(
                     "response_error",
                     model_alias=route.alias,

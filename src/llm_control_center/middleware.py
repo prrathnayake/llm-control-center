@@ -10,9 +10,9 @@ from starlette.responses import Response
 logger = structlog.stdlib.get_logger(__name__)
 
 
-def _get_client_ip(request: Request) -> str:
+def _get_client_ip(request: Request, *, trust_proxy_headers: bool = False) -> str:
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
+    if trust_proxy_headers and forwarded:
         return forwarded.split(",")[0].strip()
     if request.client:
         return request.client.host
@@ -20,12 +20,18 @@ def _get_client_ip(request: Request) -> str:
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, *, trust_proxy_headers: bool = False) -> None:  # type: ignore[override]
+        super().__init__(app)
+        self.trust_proxy_headers = trust_proxy_headers
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         correlation_id = request.headers.get("x-request-id") or uuid.uuid4().hex
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
 
-        client_ip = _get_client_ip(request)
+        client_ip = _get_client_ip(
+            request, trust_proxy_headers=self.trust_proxy_headers
+        )
         logger.info(
             "request_received",
             method=request.method,

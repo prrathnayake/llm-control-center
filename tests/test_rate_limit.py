@@ -16,6 +16,7 @@ def _make_limited_app(
     chat_limit: int = 3,
     models_limit: int = 4,
     max_request_size_mb: int = 1,
+    trust_proxy_headers: bool = False,
 ) -> tuple[Settings, TestClient]:
     """Create an app with tight rate limits for testing."""
     tmp_dir = tempfile.mkdtemp()
@@ -30,6 +31,7 @@ def _make_limited_app(
         rate_limit_chat=chat_limit,
         rate_limit_models=models_limit,
         max_request_size_mb=max_request_size_mb,
+        trust_proxy_headers=trust_proxy_headers,
     )
     app = create_app(settings)
     return settings, TestClient(app, raise_server_exceptions=False)
@@ -158,7 +160,9 @@ class TestRateLimitExceeded:
 
 class TestForwardedForRateLimit:
     def test_admin_rate_limit_uses_forwarded_for(self, limited_client_factory):
-        settings, client = limited_client_factory(admin_limit=2)
+        settings, client = limited_client_factory(
+            admin_limit=2, trust_proxy_headers=True
+        )
         forwarded_headers = {"X-Admin-Token": "test-admin", "X-Forwarded-For": "203.0.113.9"}
 
         for _ in range(2):
@@ -169,7 +173,9 @@ class TestForwardedForRateLimit:
         assert resp.status_code == 429
 
     def test_models_and_health_share_bucket(self, limited_client_factory):
-        settings, client = limited_client_factory(models_limit=2)
+        settings, client = limited_client_factory(
+            models_limit=2, trust_proxy_headers=True
+        )
         forwarded_headers = {"X-Forwarded-For": "198.51.100.7"}
         # Two requests from different paths draw from the shared models bucket
         # (use /health twice since it's unauthenticated; both still share the models bucket)
@@ -180,6 +186,18 @@ class TestForwardedForRateLimit:
         # A different forwarded-IP gets its own bucket
         other_headers = {"X-Forwarded-For": "198.51.100.42"}
         assert client.get("/health", headers=other_headers).status_code == 200
+
+    def test_untrusted_forwarded_for_cannot_rotate_rate_bucket(
+        self, limited_client_factory
+    ):
+        settings, client = limited_client_factory(models_limit=1)
+
+        assert client.get(
+            "/health", headers={"X-Forwarded-For": "198.51.100.1"}
+        ).status_code == 200
+        assert client.get(
+            "/health", headers={"X-Forwarded-For": "198.51.100.2"}
+        ).status_code == 429
 
 
 class TestPerProjectChatRateLimit:
@@ -249,6 +267,25 @@ class TestPerProjectChatRateLimit:
         )
         assert resp.status_code == 200
 
+    def test_rotating_invalid_tokens_share_pre_auth_bucket(
+        self, limited_client_factory
+    ):
+        settings, client = limited_client_factory(chat_limit=1)
+
+        first = client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer invalid-token-a"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+        second = client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": "Bearer invalid-token-b"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+        assert first.status_code == 401
+        assert second.status_code == 429
+
 
 class TestRequestSizeLimit:
     def test_oversize_request_rejected(self, limited_client_factory):
@@ -272,6 +309,33 @@ class TestRequestSizeLimit:
             json={"name": "test", "description": "small"},
         )
         assert resp.status_code == 200
+
+    def test_malformed_content_length_is_rejected(self, limited_client_factory):
+        settings, client = limited_client_factory(max_request_size_mb=1)
+
+        resp = client.get("/health", headers={"Content-Length": "not-a-number"})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Invalid Content-Length header"
+
+    def test_schema_rejects_unbounded_message_collection(self, limited_client_factory):
+        settings, client = limited_client_factory(chat_limit=10)
+        api_key = _create_project_and_key(
+            client, {"X-Admin-Token": "test-admin"}
+        )
+
+        response = client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "messages": [
+                    {"role": "user", "content": str(index)}
+                    for index in range(201)
+                ]
+            },
+        )
+
+        assert response.status_code == 422
 
 
 class TestDisabledInTestMode:

@@ -56,6 +56,10 @@ class OpenAICompatibleProvider:
             self._client = httpx.AsyncClient(timeout=self.timeout_seconds)
         return self._client
 
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+
     async def chat(self, request: ProviderChatRequest) -> ProviderChatResponse:
         if not self.api_key:
             raise ProviderExecutionError("OpenAI-compatible provider API key is not configured")
@@ -89,7 +93,7 @@ class OpenAICompatibleProvider:
                 model=request.provider_model,
                 error=str(exc),
             )
-            raise ProviderExecutionError(f"OpenAI-compatible provider failed: {exc}") from exc
+            raise ProviderExecutionError("OpenAI-compatible provider request failed") from exc
 
         data = response.json()
         try:
@@ -201,7 +205,7 @@ class OpenAICompatibleProvider:
                 model=request.provider_model,
                 error=str(exc),
             )
-            raise ProviderExecutionError(f"OpenAI-compatible provider failed: {exc}") from exc
+            raise ProviderExecutionError("OpenAI-compatible provider request failed") from exc
 
         data = response.json()
         output_text = data.get("output_text")

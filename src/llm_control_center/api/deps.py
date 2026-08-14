@@ -32,12 +32,14 @@ def require_project_principal(
         logger.warning("auth_failed", auth_type="api_key", reason="missing bearer token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
     raw_key = authorization.removeprefix("Bearer ").strip()
-    api_key_service: ApiKeyService = request.app.state.api_key_service
-    try:
-        key = api_key_service.authenticate(raw_key)
-    except AuthenticationError as exc:
-        logger.warning("auth_failed", auth_type="api_key", reason=str(exc))
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    key = getattr(request.state, "authenticated_api_key", None)
+    if not isinstance(key, dict):
+        api_key_service: ApiKeyService = request.app.state.api_key_service
+        try:
+            key = api_key_service.authenticate(raw_key)
+        except AuthenticationError as exc:
+            logger.warning("auth_failed", auth_type="api_key", reason=str(exc))
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     logger.debug("auth_success", auth_type="api_key", project_id=key["project_id"])
     return ProjectPrincipal(
         project_id=key["project_id"],

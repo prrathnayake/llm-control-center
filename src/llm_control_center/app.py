@@ -38,7 +38,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store.initialize()
     router = ModelRouter(runtime_settings.model_routes, runtime_settings.default_model_alias)
     providers = build_provider_registry(runtime_settings)
-    usage_service = UsageService(store=store)
+    usage_spool_path = runtime_settings.usage_spool_path
+    if (
+        usage_spool_path == "./data/usage_spool.sqlite3"
+        and runtime_settings.database_url.startswith("sqlite:///")
+    ):
+        database_path = runtime_settings.database_url.removeprefix("sqlite:///")
+        usage_spool_path = f"{database_path}.usage-spool.sqlite3"
+    usage_service = UsageService(
+        store=store,
+        spool_path=usage_spool_path,
+    )
     api_key_service = ApiKeyService(store=store, settings=runtime_settings)
     project_service = ProjectService(store=store)
     models_service = ModelsService(router=router, providers=providers)
@@ -56,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await usage_service.stop()
+            await providers.aclose()
             store.close()
 
     fastapi_app = FastAPI(
@@ -92,13 +103,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             DocsProtectionMiddleware, admin_token=runtime_settings.admin_token
         )
     fastapi_app.add_middleware(SecurityHeadersMiddleware)
-    fastapi_app.add_middleware(CorrelationIdMiddleware)
+    fastapi_app.add_middleware(
+        CorrelationIdMiddleware,
+        trust_proxy_headers=runtime_settings.trust_proxy_headers,
+    )
     fastapi_app.add_middleware(
         RateLimitMiddleware,
         admin_limit=runtime_settings.rate_limit_admin,
         chat_limit=runtime_settings.rate_limit_chat,
         models_limit=runtime_settings.rate_limit_models,
         max_request_size_bytes=runtime_settings.max_request_size_mb * 1_048_576,
+        trust_proxy_headers=runtime_settings.trust_proxy_headers,
     )
 
     return fastapi_app

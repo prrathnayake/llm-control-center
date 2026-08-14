@@ -14,13 +14,13 @@
 
 ## Phase 2: Production controls
 
-- [ ] PostgreSQL persistence
-- [ ] API key revocation
-- [ ] per-project rate limits
+- [x] PostgreSQL persistence
+- [x] API key revocation
+- [x] per-project rate limits
 - [ ] per-project monthly budget limits
 - [ ] fallback routing
-- [ ] provider health checks
-- [ ] structured log redaction
+- [x] provider circuit breaker and concurrency bulkhead
+- [x] public provider-error redaction
 
 ## Phase 3: Advanced LLM platform
 

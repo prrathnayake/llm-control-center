@@ -89,6 +89,26 @@ OpenAI-compatible APIs and Ollama are both adapters behind the same interface.
 Usage/activity records are enqueued through `UsageService` and written by a
 bounded async worker. Admin usage reads flush the queue first, so monitoring sees
 recent records without forcing provider calls to wait on every database write.
+Every queued record is first persisted to a local SQLite spool. Successful
+database writes acknowledge and remove the receipt; pending receipts replay on
+restart, transient failures retry with bounded backoff, and exhausted records
+remain as explicit dead letters. Usage `trace_id` is unique and replay-safe.
+
+### 7. Bounded provider execution
+
+Every provider is wrapped by a concurrency bulkhead and circuit breaker. The
+bulkhead bounds active calls and queue wait time. Repeated upstream failures open
+the circuit for a configured cooldown, preventing an unhealthy provider from
+consuming all gateway capacity. Provider-owned HTTP clients close during the
+application lifespan shutdown.
+
+### 8. Authentication-aware ingress controls
+
+Chat rate-limit buckets use the authenticated API-key ID, never raw credential
+text. Invalid or rotating credentials share a client-IP pre-authentication
+bucket. Forwarding headers are ignored unless `LLM_CC_TRUST_PROXY_HEADERS=true`.
+The middleware validates declared length and actual body bytes, and public
+schemas cap collection sizes, metadata, token requests, and free text.
 
 ## Extension points
 
@@ -115,11 +135,11 @@ messages and return a normalized response output.
 ## Future production upgrades
 
 - PostgreSQL as the production database for concurrent agent activity
-- Redis rate limits
+- Redis rate-limit storage for horizontally scaled deployments
 - Prometheus/OpenTelemetry metrics
 - Langfuse-style trace export
 - streaming provider passthrough
 - budget governance
-- provider health scoring
+- weighted provider health scoring and automatic alias fallback
 - fallback routing
 - secret manager integration

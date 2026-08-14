@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     admin_token: str = "change-me-admin-token"
     api_key_pepper: str = "change-me-long-random-pepper"
     database_url: str = "sqlite:///./data/control_center.sqlite3"
+    usage_spool_path: str = "./data/usage_spool.sqlite3"
     model_routes: dict[str, dict[str, str]] = Field(
         default_factory=lambda: {
             "default-chat": {"provider": "mock", "provider_model": "mock-smart"},
@@ -40,6 +41,10 @@ class Settings(BaseSettings):
     openai_compatible_responses_api: bool = False
     ollama_base_url: str = "http://localhost:11434"
     request_timeout_seconds: float = 60.0
+    provider_max_concurrency: int = Field(default=32, ge=1, le=10_000)
+    provider_queue_timeout_seconds: float = Field(default=5.0, gt=0.0, le=300.0)
+    provider_failure_threshold: int = Field(default=5, ge=1, le=1_000)
+    provider_circuit_cooldown_seconds: float = Field(default=30.0, gt=0.0, le=3600.0)
 
     rate_limit_admin: int = 60
     rate_limit_chat: int = 30
@@ -47,6 +52,7 @@ class Settings(BaseSettings):
     max_request_size_mb: int = 1
     cors_origins: list[str] = Field(default=["http://localhost:3000", "http://localhost:8080"])
     docs_protected: bool = True
+    trust_proxy_headers: bool = False
 
     @field_validator("model_routes", mode="before")
     @classmethod
@@ -86,12 +92,21 @@ def validate_settings(settings: Settings) -> None:
             ],
         )
 
-    if settings.admin_token in _INSECURE_DEFAULTS:
+    insecure_admin = settings.admin_token in _INSECURE_DEFAULTS
+    insecure_pepper = settings.api_key_pepper in _INSECURE_DEFAULTS
+    if settings.env.lower() in {"prod", "production"} and (
+        insecure_admin or insecure_pepper
+    ):
+        raise ValueError(
+            "production requires non-default LLM_CC_ADMIN_TOKEN and "
+            "LLM_CC_API_KEY_PEPPER"
+        )
+    if insecure_admin:
         logger.warning(
             "LLM_CC_ADMIN_TOKEN is using an insecure default value. "
             "Set a strong, unique token before deploying to production."
         )
-    if settings.api_key_pepper in _INSECURE_DEFAULTS:
+    if insecure_pepper:
         logger.warning(
             "LLM_CC_API_KEY_PEPPER is using an insecure default value. "
             "Set a strong, unique pepper before deploying to production."
