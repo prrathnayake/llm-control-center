@@ -51,3 +51,7 @@ class TestValidateSettings:
             api_key_pepper="secure-pepper",
         )
         validate_settings(settings)
+
+    def test_production_rejects_insecure_default_secrets(self):
+        with pytest.raises(ValueError, match="production requires"):
+            validate_settings(Settings(env="production"))

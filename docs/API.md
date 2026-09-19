@@ -190,6 +190,83 @@ Response:
 }
 ```
 
+## Responses
+
+```http
+POST /v1/responses
+```
+
+Use this endpoint for agent-style requests, structured outputs, and provider-neutral
+middleware calls. Project API keys need `responses:write`; keys with `chat:write`
+are accepted during migration.
+
+Request:
+
+```json
+{
+  "model": "default-chat",
+  "input": "Classify this agent event",
+  "instructions": "Return only JSON.",
+  "temperature": 0.2,
+  "max_output_tokens": 1000,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "schema": {"type": "object"},
+      "strict": true
+    }
+  },
+  "reasoning": {"effort": "low"},
+  "tools": [],
+  "tool_choice": "auto",
+  "parallel_tool_calls": true,
+  "metadata": {
+    "workflow": "agent-run",
+    "session_id": "sess_123",
+    "user_id": "workspace-user"
+  },
+  "provider_options": {
+    "top_p": 0.9
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": "resp_...",
+  "object": "response",
+  "status": "completed",
+  "created_at": 1760000000,
+  "model": "default-chat",
+  "provider": "mock",
+  "trace_id": "tr_...",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        {"type": "output_text", "text": "{\"ok\":true}", "annotations": []}
+      ]
+    }
+  ],
+  "output_text": "{\"ok\":true}",
+  "usage": {
+    "prompt_tokens": 4,
+    "completion_tokens": 8,
+    "total_tokens": 12
+  },
+  "metadata": {
+    "workflow": "agent-run",
+    "session_id": "sess_123"
+  }
+}
+```
+
+Clients never send provider model names. `model` is always a gateway alias.
+
 ## Usage logs
 
 ```http
@@ -197,6 +274,18 @@ GET /admin/usage?project_id=<optional>
 ```
 
 Use this endpoint to inspect project-level traffic, provider routing, latency, token estimates, and errors.
+
+Additional filters:
+
+| Query parameter | Description |
+|---|---|
+| `endpoint` | Filter by `/v1/chat/completions` or `/v1/responses` |
+| `status` | Filter by `success` or `error` |
+| `workflow` | Filter by metadata workflow |
+| `session_id` | Filter by metadata session ID |
+| `user_id` | Filter by metadata user ID |
+| `created_after` | ISO timestamp lower bound |
+| `created_before` | ISO timestamp upper bound |
 
 ## Rate limiting
 
@@ -217,7 +306,7 @@ Every response includes:
 | Group | Endpoints | Default limit | Scope |
 |---|---|---|---|
 | Admin | `/admin/*` | 60 req/min | Per client IP |
-| Chat completions | `/v1/chat/completions` | 30 req/min | Per API key (per project) |
+| LLM requests | `/v1/chat/completions`, `/v1/responses` | 30 req/min | Per API key (per project) |
 | Models / Health | `/v1/models`, `/health` | 120 req/min (shared pool) | Per client IP |
 
 The Models and Health endpoints share one bucket per client IP (so `GET /v1/models` and `GET /health` draw from the same 120 req/min allowance). The client IP is resolved from the leftmost `X-Forwarded-For` header value when present (e.g. behind a reverse proxy), falling back to the direct connection IP.
